@@ -185,4 +185,54 @@ object BookmarkHistoryManager {
         _history.value = emptyList()
         saveHistory()
     }
+
+    // 导出书签为标准 JSON 字符串
+    fun exportBookmarksJson(): String {
+        val array = JSONArray()
+        _bookmarks.value.forEach { item ->
+            val obj = JSONObject().apply {
+                put("id", item.id)
+                put("title", item.title)
+                put("url", item.url)
+                if (item.faviconUrl != null) put("faviconUrl", item.faviconUrl)
+                put("createdAt", item.createdAt)
+            }
+            array.put(obj)
+        }
+        return array.toString(2)
+    }
+
+    // 从 JSON 导入书签 (智能增量合并)
+    fun importBookmarksJson(jsonStr: String): Int {
+        return try {
+            val array = JSONArray(jsonStr)
+            var count = 0
+            val existingUrls = _bookmarks.value.map { it.url }.toSet()
+            val newItems = mutableListOf<BookmarkItem>()
+
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val url = obj.optString("url")
+                if (url.isNotBlank() && !existingUrls.contains(url)) {
+                    newItems.add(
+                        BookmarkItem(
+                            title = obj.optString("title", url),
+                            url = url,
+                            faviconUrl = if (obj.has("faviconUrl")) obj.optString("faviconUrl") else null,
+                            createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                        )
+                    )
+                    count++
+                }
+            }
+
+            if (newItems.isNotEmpty()) {
+                _bookmarks.update { newItems + it }
+                saveBookmarks()
+            }
+            count
+        } catch (_: Exception) {
+            -1
+        }
+    }
 }
