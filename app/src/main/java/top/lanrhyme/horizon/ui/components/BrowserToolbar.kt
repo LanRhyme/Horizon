@@ -37,6 +37,8 @@ fun BrowserToolbar(
     onRefresh: () -> Unit,
     onToggleSplitView: () -> Unit,
     onTogglePin: () -> Unit,
+    onToggleDesktopMode: () -> Unit,
+    onOpenTools: () -> Unit,
     onOpenSyncSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -47,11 +49,11 @@ fun BrowserToolbar(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(16.dp),
+            .height(48.dp)
+            .padding(horizontal = 2.dp),
+        shape = RoundedCornerShape(14.dp),
         color = MorandiPalette.SurfaceElevated,
-        tonalElevation = 1.dp
+        tonalElevation = 2.dp
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
@@ -172,13 +174,26 @@ fun BrowserToolbar(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
+                // 桌面端视图快捷切换
+                IconButton(
+                    onClick = onToggleDesktopMode,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DesktopWindows,
+                        contentDescription = "桌面版",
+                        tint = if (activeTab?.isDesktopMode == true) MorandiPalette.AccentBlue else MorandiPalette.TextMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
                 // 固定当前标签按钮
                 IconButton(
                     onClick = onTogglePin,
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = if (activeTab?.isPinned == true) Icons.Default.PushPin else Icons.Default.PushPin,
+                        imageVector = Icons.Default.PushPin,
                         contentDescription = "固定标签",
                         tint = if (activeTab?.isPinned == true) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary,
                         modifier = Modifier.size(18.dp)
@@ -194,6 +209,19 @@ fun BrowserToolbar(
                         imageVector = Icons.Default.VerticalSplit,
                         contentDescription = "同屏分屏",
                         tint = if (isSplitViewActive) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // 工具箱入口
+                IconButton(
+                    onClick = onOpenTools,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Construction,
+                        contentDescription = "工具箱",
+                        tint = MorandiPalette.TextSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                 }

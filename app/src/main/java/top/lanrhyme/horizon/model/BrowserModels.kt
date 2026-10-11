@@ -11,7 +11,8 @@ data class BrowserTab(
     val progress: Int = 0,
     val isPinned: Boolean = false,
     val canGoBack: Boolean = false,
-    val canGoForward: Boolean = false
+    val canGoForward: Boolean = false,
+    val isDesktopMode: Boolean = false
 )
 
 data class BrowserSpace(

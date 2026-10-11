@@ -44,6 +44,9 @@ fun TabletSidebar(
     onCloseTab: (String) -> Unit,
     onNewTab: () -> Unit,
     onTogglePin: (String) -> Unit,
+    onOpenExtensions: () -> Unit,
+    onOpenTools: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val sidebarWidth by animateDpAsState(
@@ -176,8 +179,57 @@ fun TabletSidebar(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 一体化底部系统功能栏：扩展、工具箱、设置
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp)
+                        .background(MorandiPalette.SurfaceElevated, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onOpenExtensions,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Extension,
+                            contentDescription = "扩展中心",
+                            tint = MorandiPalette.TextSecondary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onOpenTools,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Construction,
+                            contentDescription = "工具箱",
+                            tint = MorandiPalette.TextSecondary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "设置",
+                            tint = MorandiPalette.TextSecondary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
             } else {
-                // 折叠态：紧凑空间圆点切换
+                // 折叠态：紧凑空间圆点切换与垂直功能图标
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -192,6 +244,18 @@ fun TabletSidebar(
                                 .background(Color(space.accentColorHex))
                                 .clickable { onSelectSpace(space.id) }
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    IconButton(onClick = onOpenExtensions, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Extension, contentDescription = "扩展", tint = MorandiPalette.TextMuted, modifier = Modifier.size(16.dp))
+                    }
+                    IconButton(onClick = onOpenTools, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Construction, contentDescription = "工具箱", tint = MorandiPalette.TextMuted, modifier = Modifier.size(16.dp))
+                    }
+                    IconButton(onClick = onOpenSettings, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Settings, contentDescription = "设置", tint = MorandiPalette.TextMuted, modifier = Modifier.size(16.dp))
                     }
                 }
             }

@@ -168,12 +168,73 @@ class TabManager(
         }
     }
 
+    // 搜索引擎管理 (默认 Bing)
+    private val _searchEngine = MutableStateFlow("Bing")
+    val searchEngine: StateFlow<String> = _searchEngine.asStateFlow()
+
+    fun setSearchEngine(engine: String) {
+        _searchEngine.value = engine
+    }
+
+    fun toggleDesktopMode(tabId: String) {
+        val session = sessionMap[tabId] ?: return
+        val isDesktop = session.settings.userAgentMode == org.mozilla.geckoview.GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+        val newMode = if (isDesktop) {
+            org.mozilla.geckoview.GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+        } else {
+            org.mozilla.geckoview.GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+        }
+        val newVp = if (isDesktop) {
+            org.mozilla.geckoview.GeckoSessionSettings.VIEWPORT_MODE_MOBILE
+        } else {
+            org.mozilla.geckoview.GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
+        }
+        session.settings.userAgentMode = newMode
+        session.settings.viewportMode = newVp
+        session.reload()
+        updateTab(tabId) { it.copy(isDesktopMode = !isDesktop) }
+    }
+
+    fun viewSource(tabId: String) {
+        val currentTab = _tabs.value.find { it.id == tabId } ?: return
+        val currentUrl = currentTab.url
+        if (currentUrl.isNotBlank() && !currentUrl.startsWith("view-source:")) {
+            createNewTab(
+                spaceId = currentTab.spaceId,
+                url = "view-source:$currentUrl",
+                title = "源码: ${currentTab.title}"
+            )
+        }
+    }
+
+    fun clearBrowsingData(onCompleted: () -> Unit = {}) {
+        geckoRuntime.storageController.clearData(
+            org.mozilla.geckoview.StorageController.ClearFlags.ALL
+        ).accept({
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                onCompleted()
+            }
+        }, {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                onCompleted()
+            }
+        })
+    }
+
     fun loadUrl(tabId: String, rawInput: String) {
         val trimmed = rawInput.trim()
         val finalUrl = when {
-            trimmed.startsWith("http://") || trimmed.startsWith("https://") -> trimmed
+            trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("view-source:") || trimmed.startsWith("about:") -> trimmed
             trimmed.contains(".") && !trimmed.contains(" ") -> "https://$trimmed"
-            else -> "https://cn.bing.com/search?q=" + java.net.URLEncoder.encode(trimmed, "UTF-8")
+            else -> {
+                val query = java.net.URLEncoder.encode(trimmed, "UTF-8")
+                when (_searchEngine.value) {
+                    "Google" -> "https://www.google.com/search?q=$query"
+                    "DuckDuckGo" -> "https://duckduckgo.com/?q=$query"
+                    "Baidu" -> "https://www.baidu.com/s?wd=$query"
+                    else -> "https://cn.bing.com/search?q=$query"
+                }
+            }
         }
 
         val session = getOrCreateSession(tabId)
