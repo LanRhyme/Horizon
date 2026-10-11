@@ -134,24 +134,29 @@ object FxaSyncManager {
 
         tabsStorage = RemoteTabsStorage(app, crashReporter = NoOpCrashReporting)
 
-        startAutoSyncSchedule()
-
-        // 检查已有登录态
+        // 启动 FxA 状态机
         scope.launch(Dispatchers.IO) {
-            val connected = accountManager?.authenticatedAccount()
-            if (connected != null) {
-                val profile = accountManager?.accountProfile()
-                withContext(Dispatchers.Main) {
-                    _accountState.value = _accountState.value.copy(
-                        isLoggedIn = true,
-                        userEmail = profile?.email ?: _accountState.value.userEmail,
-                        avatarUrl = profile?.avatar?.url ?: _accountState.value.avatarUrl
-                    )
-                    saveLocalAccountState()
+            try {
+                accountManager?.start()
+                val connected = accountManager?.authenticatedAccount()
+                if (connected != null) {
+                    val profile = accountManager?.accountProfile()
+                    withContext(Dispatchers.Main) {
+                        _accountState.value = _accountState.value.copy(
+                            isLoggedIn = true,
+                            userEmail = profile?.email ?: _accountState.value.userEmail,
+                            avatarUrl = profile?.avatar?.url ?: _accountState.value.avatarUrl
+                        )
+                        saveLocalAccountState()
+                    }
+                    triggerSync()
                 }
-                triggerSync()
+            } catch (e: Exception) {
+                android.util.Log.e("HorizonFxa", "Error starting FxaAccountManager", e)
             }
         }
+
+        startAutoSyncSchedule()
     }
 
     private fun startAutoSyncSchedule() {
@@ -261,7 +266,11 @@ object FxaSyncManager {
 
     // 启动官方 FxA OAuth 登录流程
     fun requestAuthUrl(onUrlReady: (String) -> Unit) {
-        val manager = accountManager ?: return
+        val manager = accountManager
+        if (manager == null) {
+            onUrlReady(getFallbackAuthUrl())
+            return
+        }
         scope.launch(Dispatchers.IO) {
             try {
                 val entryPoint = object : FxAEntryPoint {
@@ -270,15 +279,26 @@ object FxaSyncManager {
                 val authUrl = manager.beginAuthentication(
                     entrypoint = entryPoint
                 )
-                if (authUrl != null) {
-                    withContext(Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
+                    if (!authUrl.isNullOrBlank()) {
                         onUrlReady(authUrl)
+                    } else {
+                        onUrlReady(getFallbackAuthUrl())
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("HorizonFxa", "Error in beginAuthentication", e)
+                withContext(Dispatchers.Main) {
+                    onUrlReady(getFallbackAuthUrl())
+                }
             }
         }
+    }
+
+    private fun getFallbackAuthUrl(): String {
+        val encodedRedirect = Uri.encode(REDIRECT_URI)
+        val encodedScope = Uri.encode("profile https://identity.mozilla.com/apps/oldsync")
+        return "https://accounts.firefox.com/authorization?client_id=$FXA_CLIENT_ID&scope=$encodedScope&redirect_uri=$encodedRedirect&action=signin"
     }
 
     // 处理 OAuth 回调参数 (code, state) 或回调 Uri
