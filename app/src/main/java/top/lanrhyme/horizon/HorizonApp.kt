@@ -11,7 +11,12 @@ class HorizonApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        geckoRuntime = GeckoRuntime.create(this)
+        val settings = org.mozilla.geckoview.GeckoRuntimeSettings.Builder()
+            .isolatedProcessEnabled(false)
+            .fissionEnabled(false)
+            .consoleOutput(true)
+            .build()
+        geckoRuntime = GeckoRuntime.create(this, settings)
     }
 
     companion object {

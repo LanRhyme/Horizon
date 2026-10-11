@@ -35,6 +35,12 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -54,8 +60,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // GeckoView & Mozilla Android Components
-    val acVersion = "153.0"
-    implementation("org.mozilla.geckoview:geckoview-omni:153.0.20260810162159")
+    val acVersion = "145.0"
+    implementation("org.mozilla.geckoview:geckoview-omni:145.0.20251124145406")
     implementation("org.mozilla.components:browser-engine-gecko:$acVersion")
     implementation("org.mozilla.components:feature-session:$acVersion")
     implementation("org.mozilla.components:feature-tabs:$acVersion")
