@@ -5,7 +5,8 @@ plugins {
 
 android {
     namespace = "top.lanrhyme.horizon"
-    compileSdk = 36
+    compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         applicationId = "top.lanrhyme.horizon"
@@ -60,8 +61,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // GeckoView & Mozilla Android Components
-    val acVersion = "145.0"
-    implementation("org.mozilla.geckoview:geckoview-omni:145.0.20251124145406")
+    val acVersion = "157.0"
+    implementation("org.mozilla.geckoview:geckoview-omni:157.0.20261005135250")
     implementation("org.mozilla.components:browser-engine-gecko:$acVersion")
     implementation("org.mozilla.components:feature-session:$acVersion")
     implementation("org.mozilla.components:feature-tabs:$acVersion")
