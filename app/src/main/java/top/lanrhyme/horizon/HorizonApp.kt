@@ -24,6 +24,10 @@ class HorizonApp : Application() {
             .consoleOutput(true)
             .build()
         geckoRuntime = GeckoRuntime.create(this, settings)
+
+        // 初始化本地存储与跨端同步管理器
+        top.lanrhyme.horizon.core.BookmarkHistoryManager.init(this)
+        top.lanrhyme.horizon.sync.FxaSyncManager.init(this)
     }
 
     companion object {

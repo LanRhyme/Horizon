@@ -213,12 +213,22 @@ fun NewTabDashboard(
                                     .background(site.accentColor.copy(alpha = 0.12f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                AsyncImage(
-                                    model = site.iconUrl,
-                                    contentDescription = site.title,
-                                    modifier = Modifier.size(20.dp),
-                                    onError = {}
-                                )
+                                var isImageError by remember { mutableStateOf(false) }
+                                if (!isImageError) {
+                                    AsyncImage(
+                                        model = site.iconUrl,
+                                        contentDescription = site.title,
+                                        modifier = Modifier.size(20.dp),
+                                        onError = { isImageError = true }
+                                    )
+                                } else {
+                                    Text(
+                                        text = site.fallbackLetter,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = site.accentColor
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(

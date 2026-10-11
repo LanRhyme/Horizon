@@ -1,6 +1,7 @@
 package top.lanrhyme.horizon.core
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,6 +9,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import top.lanrhyme.horizon.model.BrowserSpace
@@ -17,6 +20,16 @@ class TabManager(
     private val context: Context,
     private val geckoRuntime: GeckoRuntime
 ) : ViewModel() {
+
+    private val prefs: SharedPreferences = context.getSharedPreferences("horizon_tabs_spaces", Context.MODE_PRIVATE)
+
+    companion object {
+        private const val KEY_SPACES = "saved_spaces"
+        private const val KEY_TABS = "saved_tabs"
+        private const val KEY_SEARCH_ENGINE = "saved_search_engine"
+        private const val KEY_ACTIVE_TAB_ID = "saved_active_tab_id"
+        private const val KEY_CURRENT_SPACE_ID = "saved_current_space_id"
+    }
 
     // 默认工作空间 Spaces
     val defaultSpaces = listOf(
@@ -41,17 +54,125 @@ class TabManager(
     private val _secondaryTabId = MutableStateFlow<String?>(null)
     val secondaryTabId: StateFlow<String?> = _secondaryTabId.asStateFlow()
 
+    // 搜索引擎管理 (默认 Bing)
+    private val _searchEngine = MutableStateFlow("Bing")
+    val searchEngine: StateFlow<String> = _searchEngine.asStateFlow()
+
     // 缓存 GeckoSession 实例，避免重复重建与销毁
     private val sessionMap = mutableMapOf<String, GeckoSession>()
 
     init {
-        // 创建初始默认标签（起始仪表盘页）
-        val initialTab = createNewTab(
-            spaceId = "space_general",
-            url = "horizon://newtab",
-            title = "新标签页"
-        )
-        _activeTabId.value = initialTab.id
+        loadPersistedState()
+    }
+
+    private fun loadPersistedState() {
+        // 读取搜索引擎
+        val savedEngine = prefs.getString(KEY_SEARCH_ENGINE, "Bing") ?: "Bing"
+        _searchEngine.value = savedEngine
+
+        // 读取 Spaces
+        val spacesJson = prefs.getString(KEY_SPACES, null)
+        if (!spacesJson.isNullOrBlank()) {
+            try {
+                val array = JSONArray(spacesJson)
+                val list = mutableListOf<BrowserSpace>()
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    list.add(
+                        BrowserSpace(
+                            id = obj.getString("id"),
+                            name = obj.getString("name"),
+                            iconName = obj.optString("iconName", "Default"),
+                            accentColorHex = obj.optLong("accentColorHex", 0xFF5B7083)
+                        )
+                    )
+                }
+                if (list.isNotEmpty()) {
+                    _spaces.value = list
+                }
+            } catch (_: Exception) {}
+        }
+
+        val savedSpaceId = prefs.getString(KEY_CURRENT_SPACE_ID, "space_general") ?: "space_general"
+        if (_spaces.value.any { it.id == savedSpaceId }) {
+            _currentSpaceId.value = savedSpaceId
+        }
+
+        // 读取 Tabs
+        val tabsJson = prefs.getString(KEY_TABS, null)
+        val loadedTabs = mutableListOf<BrowserTab>()
+        if (!tabsJson.isNullOrBlank()) {
+            try {
+                val array = JSONArray(tabsJson)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    loadedTabs.add(
+                        BrowserTab(
+                            id = obj.getString("id"),
+                            spaceId = obj.getString("spaceId"),
+                            title = obj.optString("title", "新标签页"),
+                            url = obj.optString("url", "horizon://newtab"),
+                            isPinned = obj.optBoolean("isPinned", false),
+                            isDesktopMode = obj.optBoolean("isDesktopMode", false),
+                            faviconUrl = if (obj.has("faviconUrl")) obj.optString("faviconUrl") else null,
+                            isReaderMode = obj.optBoolean("isReaderMode", false)
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (loadedTabs.isNotEmpty()) {
+            _tabs.value = loadedTabs
+            val savedActiveId = prefs.getString(KEY_ACTIVE_TAB_ID, null)
+            _activeTabId.value = if (loadedTabs.any { it.id == savedActiveId }) savedActiveId else loadedTabs.first().id
+        } else {
+            // 没有已恢复的标签，创建初始标签
+            val initialTab = createNewTab(
+                spaceId = _currentSpaceId.value,
+                url = "horizon://newtab",
+                title = "新标签页"
+            )
+            _activeTabId.value = initialTab.id
+        }
+    }
+
+    private fun persistTabs() {
+        val array = JSONArray()
+        _tabs.value.forEach { tab ->
+            val obj = JSONObject().apply {
+                put("id", tab.id)
+                put("spaceId", tab.spaceId)
+                put("title", tab.title)
+                put("url", tab.url)
+                put("isPinned", tab.isPinned)
+                put("isDesktopMode", tab.isDesktopMode)
+                if (tab.faviconUrl != null) put("faviconUrl", tab.faviconUrl)
+                put("isReaderMode", tab.isReaderMode)
+            }
+            array.put(obj)
+        }
+        prefs.edit()
+            .putString(KEY_TABS, array.toString())
+            .putString(KEY_ACTIVE_TAB_ID, _activeTabId.value)
+            .apply()
+    }
+
+    private fun persistSpaces() {
+        val array = JSONArray()
+        _spaces.value.forEach { space ->
+            val obj = JSONObject().apply {
+                put("id", space.id)
+                put("name", space.name)
+                put("iconName", space.iconName)
+                put("accentColorHex", space.accentColorHex)
+            }
+            array.put(obj)
+        }
+        prefs.edit()
+            .putString(KEY_SPACES, array.toString())
+            .putString(KEY_CURRENT_SPACE_ID, _currentSpaceId.value)
+            .apply()
     }
 
     private fun extractFaviconUrl(rawUrl: String): String? {
@@ -132,9 +253,11 @@ class TabManager(
 
     fun switchSpace(spaceId: String) {
         _currentSpaceId.value = spaceId
+        prefs.edit().putString(KEY_CURRENT_SPACE_ID, spaceId).apply()
         val spaceTabs = _tabs.value.filter { it.spaceId == spaceId }
         if (spaceTabs.isNotEmpty() && (activeTab.value == null || activeTab.value?.spaceId != spaceId)) {
             _activeTabId.value = spaceTabs.first().id
+            prefs.edit().putString(KEY_ACTIVE_TAB_ID, spaceTabs.first().id).apply()
         }
     }
 
@@ -142,6 +265,7 @@ class TabManager(
         val newSpace = BrowserSpace(name = name, accentColorHex = colorHex)
         _spaces.update { it + newSpace }
         _currentSpaceId.value = newSpace.id
+        persistSpaces()
     }
 
     fun moveTabToSpace(tabId: String, newSpaceId: String) {
@@ -197,6 +321,7 @@ class TabManager(
 
     fun selectTab(tabId: String) {
         _activeTabId.value = tabId
+        prefs.edit().putString(KEY_ACTIVE_TAB_ID, tabId).apply()
     }
 
     fun createNewTab(
@@ -211,6 +336,7 @@ class TabManager(
         )
         _tabs.update { it + newTab }
         _activeTabId.value = newTab.id
+        persistTabs()
         return newTab
     }
 
@@ -239,6 +365,7 @@ class TabManager(
         if (_secondaryTabId.value == tabId) {
             _secondaryTabId.value = null
         }
+        persistTabs()
     }
 
     fun togglePinTab(tabId: String) {
@@ -254,12 +381,9 @@ class TabManager(
         }
     }
 
-    // 搜索引擎管理 (默认 Bing)
-    private val _searchEngine = MutableStateFlow("Bing")
-    val searchEngine: StateFlow<String> = _searchEngine.asStateFlow()
-
     fun setSearchEngine(engine: String) {
         _searchEngine.value = engine
+        prefs.edit().putString(KEY_SEARCH_ENGINE, engine).apply()
     }
 
     fun toggleDesktopMode(tabId: String) {
@@ -346,6 +470,7 @@ class TabManager(
                 if (tab.id == tabId) transform(tab) else tab
             }
         }
+        persistTabs()
     }
 
     val activeTab: StateFlow<BrowserTab?> = MutableStateFlow<BrowserTab?>(null).apply {

@@ -467,26 +467,143 @@ private fun SyncAboutSection() {
             shape = RoundedCornerShape(12.dp),
             color = MorandiPalette.Surface
         ) {
-            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("当前账号", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextSecondary)
-                    Text(text = state.userEmail ?: "未登录", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MorandiPalette.TextPrimary)
+                    Column {
+                        Text("当前账号", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextSecondary)
+                        Text(
+                            text = state.userEmail ?: "未绑定 Firefox 账号",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MorandiPalette.TextPrimary
+                        )
+                    }
+
+                    if (state.isLoggedIn) {
+                        OutlinedButton(
+                            onClick = { FxaSyncManager.logout() },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text("退出", fontSize = 11.sp, color = MorandiPalette.AccentRose)
+                        }
+                    } else {
+                        var showLoginDialog by remember { mutableStateOf(false) }
+                        var emailInput by remember { mutableStateOf("user@mozilla.org") }
+
+                        Button(
+                            onClick = { showLoginDialog = true },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MorandiPalette.AccentBlue),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text("连接账号", fontSize = 11.sp)
+                        }
+
+                        if (showLoginDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showLoginDialog = false },
+                                title = { Text("连接 Firefox 账户") },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("关联你的 Firefox Sync 账号以同步跨端书签与标签页：", fontSize = 12.sp, color = MorandiPalette.TextSecondary)
+                                        OutlinedTextField(
+                                            value = emailInput,
+                                            onValueChange = { emailInput = it },
+                                            label = { Text("Firefox 邮箱") },
+                                            singleLine = true
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        if (emailInput.isNotBlank()) {
+                                            FxaSyncManager.login(emailInput)
+                                            showLoginDialog = false
+                                        }
+                                    }) {
+                                        Text("确定连接", color = MorandiPalette.AccentBlue)
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showLoginDialog = false }) {
+                                        Text("取消", color = MorandiPalette.TextSecondary)
+                                    }
+                                },
+                                containerColor = MorandiPalette.SurfaceElevated,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                        }
+                    }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("连接状态", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextSecondary)
-                    Text(
-                        text = if (state.isLoggedIn) "已连接并同步中" else "未连接",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (state.isLoggedIn) MorandiPalette.AccentSage else MorandiPalette.TextMuted
-                    )
+
+                if (state.isLoggedIn) {
+                    HorizontalDivider(color = MorandiPalette.BorderSubtle, thickness = 0.5.dp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("上次同步", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextSecondary, fontSize = 11.sp)
+                            Text(text = state.lastSyncTime ?: "正在同步...", fontSize = 12.sp, color = MorandiPalette.TextPrimary)
+                        }
+                        FilledTonalButton(
+                            onClick = { FxaSyncManager.triggerSync() },
+                            enabled = !state.isSyncing,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(if (state.isSyncing) "同步中..." else "立即同步", fontSize = 11.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    // 同步项目微调
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("同步书签库", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextPrimary)
+                        Switch(
+                            checked = state.syncBookmarksEnabled,
+                            onCheckedChange = { FxaSyncManager.toggleSyncBookmarks(it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MorandiPalette.AccentBlue)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("同步标签页 (Tabs)", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextPrimary)
+                        Switch(
+                            checked = state.syncTabsEnabled,
+                            onCheckedChange = { FxaSyncManager.toggleSyncTabs(it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MorandiPalette.AccentBlue)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("同步历史记录", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextPrimary)
+                        Switch(
+                            checked = state.syncHistoryEnabled,
+                            onCheckedChange = { FxaSyncManager.toggleSyncHistory(it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MorandiPalette.AccentBlue)
+                        )
+                    }
                 }
             }
         }
