@@ -31,7 +31,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 enum class LibraryTab {
-    BOOKMARKS, HISTORY, DOWNLOADS
+    BOOKMARKS, HISTORY, DOWNLOADS, SYNCED_TABS
 }
 
 @Composable
@@ -46,6 +46,7 @@ fun BookmarksHistoryDrawer(
     val bookmarks by BookmarkHistoryManager.bookmarks.collectAsState()
     val history by BookmarkHistoryManager.history.collectAsState()
     val downloads by DownloadManager.downloads.collectAsState()
+    val syncState by top.lanrhyme.horizon.sync.FxaSyncManager.accountState.collectAsState()
 
     LaunchedEffect(initialTab) {
         selectedTab = initialTab
@@ -59,7 +60,7 @@ fun BookmarksHistoryDrawer(
     ) {
         Surface(
             modifier = Modifier
-                .width(400.dp)
+                .width(420.dp)
                 .fillMaxHeight()
                 .padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
             shape = RoundedCornerShape(20.dp),
@@ -72,14 +73,15 @@ fun BookmarksHistoryDrawer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         modifier = Modifier
                             .background(MorandiPalette.SurfaceSubtle, RoundedCornerShape(10.dp))
-                            .padding(3.dp)
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Surface(
                             modifier = Modifier
@@ -90,7 +92,7 @@ fun BookmarksHistoryDrawer(
                         ) {
                             Text(
                                 text = "书签 (${bookmarks.size})",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (selectedTab == LibraryTab.BOOKMARKS) FontWeight.Bold else FontWeight.Normal,
                                     color = if (selectedTab == LibraryTab.BOOKMARKS) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary
@@ -107,7 +109,7 @@ fun BookmarksHistoryDrawer(
                         ) {
                             Text(
                                 text = "历史",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (selectedTab == LibraryTab.HISTORY) FontWeight.Bold else FontWeight.Normal,
                                     color = if (selectedTab == LibraryTab.HISTORY) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary
@@ -123,11 +125,28 @@ fun BookmarksHistoryDrawer(
                             shadowElevation = if (selectedTab == LibraryTab.DOWNLOADS) 1.dp else 0.dp
                         ) {
                             Text(
-                                text = "下载 (${downloads.size})",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                text = "下载",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (selectedTab == LibraryTab.DOWNLOADS) FontWeight.Bold else FontWeight.Normal,
                                     color = if (selectedTab == LibraryTab.DOWNLOADS) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary
+                                )
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { selectedTab = LibraryTab.SYNCED_TABS },
+                            color = if (selectedTab == LibraryTab.SYNCED_TABS) Color.White else Color.Transparent,
+                            shadowElevation = if (selectedTab == LibraryTab.SYNCED_TABS) 1.dp else 0.dp
+                        ) {
+                            Text(
+                                text = "多端标签",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontWeight = if (selectedTab == LibraryTab.SYNCED_TABS) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selectedTab == LibraryTab.SYNCED_TABS) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary
                                 )
                             )
                         }
@@ -467,6 +486,156 @@ fun BookmarksHistoryDrawer(
                                             onOpen = { DownloadManager.openDownloadedFile(item) },
                                             onDelete = { DownloadManager.deleteDownload(item) }
                                         )
+                                    }
+                                }
+                            }
+                        }
+
+                        LibraryTab.SYNCED_TABS -> {
+                            if (!syncState.isLoggedIn) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.padding(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SyncProblem,
+                                            contentDescription = null,
+                                            tint = MorandiPalette.TextMuted,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Text("尚未登录 Firefox 账户", color = MorandiPalette.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text("在设置 > 同步与关于中关联账号，即可浏览 PC 或手机上的实时标签页。", color = MorandiPalette.TextMuted, fontSize = 11.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                    }
+                                }
+                            } else if (syncState.remoteDevices.isEmpty() || syncState.remoteDevices.all { it.tabs.isEmpty() }) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("暂无其他设备同步的标签页", color = MorandiPalette.TextMuted, fontSize = 12.sp)
+                                }
+                            } else {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "已连接 ${syncState.remoteDevices.size} 台设备",
+                                            fontSize = 11.sp,
+                                            color = MorandiPalette.TextMuted
+                                        )
+                                        TextButton(
+                                            onClick = { top.lanrhyme.horizon.sync.FxaSyncManager.triggerSync() },
+                                            enabled = !syncState.isSyncing,
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(13.dp), tint = MorandiPalette.AccentBlue)
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(if (syncState.isSyncing) "同步中..." else "刷新", color = MorandiPalette.AccentBlue, fontSize = 11.sp)
+                                        }
+                                    }
+
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        syncState.remoteDevices.forEach { device ->
+                                            item(key = "device_${device.id}") {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(top = 4.dp, bottom = 2.dp, start = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = when (device.deviceType) {
+                                                            "mobile" -> Icons.Default.Smartphone
+                                                            "tablet" -> Icons.Default.Tablet
+                                                            else -> Icons.Default.Laptop
+                                                        },
+                                                        contentDescription = null,
+                                                        tint = MorandiPalette.AccentBlue,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "${device.name} · ${device.lastSyncTime}",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                        color = MorandiPalette.TextSecondary
+                                                    )
+                                                }
+                                            }
+
+                                            items(device.tabs, key = { "${device.id}_${it.id}" }) { tab ->
+                                                Surface(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .clickable {
+                                                            onNavigate(tab.url)
+                                                            onClose()
+                                                        },
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = MorandiPalette.SurfaceSubtle,
+                                                    border = BorderStroke(0.5.dp, MorandiPalette.BorderSubtle)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = tab.faviconUrl ?: "https://www.google.com/s2/favicons?domain_url=${tab.url}",
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+
+                                                        Spacer(modifier = Modifier.width(10.dp))
+
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = tab.title,
+                                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                                    fontSize = 12.sp,
+                                                                    fontWeight = FontWeight.Medium
+                                                                ),
+                                                                color = MorandiPalette.TextPrimary,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                            Text(
+                                                                text = tab.url,
+                                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                                                color = MorandiPalette.TextMuted,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+
+                                                        IconButton(
+                                                            onClick = {
+                                                                onNavigate(tab.url)
+                                                                onClose()
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.OpenInNew,
+                                                                contentDescription = "打开",
+                                                                tint = MorandiPalette.AccentBlue,
+                                                                modifier = Modifier.size(13.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

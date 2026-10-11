@@ -55,7 +55,7 @@ fun SettingsDrawer(
     ) {
         Surface(
             modifier = Modifier
-                .width(440.dp)
+                .width(480.dp)
                 .fillMaxHeight()
                 .padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
             shape = RoundedCornerShape(20.dp),
@@ -570,7 +570,22 @@ private fun SyncAboutSection() {
 
                     Spacer(modifier = Modifier.height(2.dp))
 
-                    // 同步项目微调
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("后台自动同步", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextPrimary)
+                            Text("每 15 分钟及标签变动时自动云端对齐", style = MaterialTheme.typography.labelSmall, color = MorandiPalette.TextMuted, fontSize = 10.sp)
+                        }
+                        Switch(
+                            checked = state.autoSyncEnabled,
+                            onCheckedChange = { FxaSyncManager.toggleAutoSync(it) },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MorandiPalette.AccentBlue)
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -589,7 +604,7 @@ private fun SyncAboutSection() {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("同步标签页 (Tabs)", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextPrimary)
+                        Text("同步多端标签页 (Tabs)", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextPrimary)
                         Switch(
                             checked = state.syncTabsEnabled,
                             onCheckedChange = { FxaSyncManager.toggleSyncTabs(it) },
@@ -608,6 +623,34 @@ private fun SyncAboutSection() {
                             onCheckedChange = { FxaSyncManager.toggleSyncHistory(it) },
                             colors = SwitchDefaults.colors(checkedTrackColor = MorandiPalette.AccentBlue)
                         )
+                    }
+
+                    if (state.remoteDevices.isNotEmpty()) {
+                        HorizontalDivider(color = MorandiPalette.BorderSubtle, thickness = 0.5.dp)
+                        Text("已同步的外部设备", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MorandiPalette.TextMuted)
+                        state.remoteDevices.forEach { dev ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = when (dev.deviceType) {
+                                            "mobile" -> Icons.Default.Smartphone
+                                            "tablet" -> Icons.Default.Tablet
+                                            else -> Icons.Default.Laptop
+                                        },
+                                        contentDescription = null,
+                                        tint = MorandiPalette.AccentBlue,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(dev.name, fontSize = 12.sp, color = MorandiPalette.TextPrimary)
+                                }
+                                Text("${dev.tabs.size} 个标签页 · ${dev.lastSyncTime}", fontSize = 10.sp, color = MorandiPalette.TextMuted)
+                            }
+                        }
                     }
                 }
             }
