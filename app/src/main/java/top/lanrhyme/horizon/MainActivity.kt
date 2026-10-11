@@ -5,219 +5,129 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.GeckoView
+import top.lanrhyme.horizon.core.TabManager
+import top.lanrhyme.horizon.ui.components.BrowserToolbar
+import top.lanrhyme.horizon.ui.components.SyncSettingsDialog
+import top.lanrhyme.horizon.ui.components.TabletSidebar
+import top.lanrhyme.horizon.ui.components.WebViewport
+import top.lanrhyme.horizon.ui.theme.MorandiPalette
 
 class MainActivity : ComponentActivity() {
 
-    private var geckoSession: GeckoSession? = null
+    private lateinit var tabManager: TabManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         val runtime = (application as HorizonApp).geckoRuntime
-        geckoSession = GeckoSession().apply {
-            open(runtime)
-            loadUri("https://www.google.com")
-        }
+        tabManager = TabManager(this, runtime)
 
         setContent {
             MaterialTheme {
-                HorizonTabletLayout(session = geckoSession)
+                HorizonBrowserScreen(tabManager = tabManager)
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        geckoSession?.close()
     }
 }
 
 @Composable
-fun HorizonTabletLayout(
-    session: GeckoSession?,
+fun HorizonBrowserScreen(
+    tabManager: TabManager,
     modifier: Modifier = Modifier
 ) {
-    var isExpanded by remember { mutableStateOf(true) }
-    var currentUrl by remember { mutableStateOf("https://www.google.com") }
+    var isSidebarExpanded by remember { mutableStateOf(true) }
+    var showSyncDialog by remember { mutableStateOf(false) }
+
+    val spaces by tabManager.spaces.collectAsState()
+    val currentSpaceId by tabManager.currentSpaceId.collectAsState()
+    val tabs by tabManager.tabs.collectAsState()
+    val activeTabId by tabManager.activeTabId.collectAsState()
+    val secondaryTabId by tabManager.secondaryTabId.collectAsState()
+
+    // 过滤出属于当前空间的标签列表
+    val spaceTabs = remember(tabs, currentSpaceId) {
+        tabs.filter { it.spaceId == currentSpaceId }
+    }
+
+    val activeTab = remember(tabs, activeTabId) {
+        tabs.find { it.id == activeTabId }
+    }
+
+    val secondaryTab = remember(tabs, secondaryTabId) {
+        tabs.find { it.id == secondaryTabId }
+    }
+
+    val primarySession = remember(activeTabId) {
+        activeTabId?.let { tabManager.getOrCreateSession(it) }
+    }
+
+    val secondarySession = remember(secondaryTabId) {
+        secondaryTabId?.let { tabManager.getOrCreateSession(it) }
+    }
 
     Row(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF7F7F9))
+            .background(MorandiPalette.Background)
             .systemBarsPadding()
     ) {
-        // 侧边栏 (Zen/Arc 风格卡片式)
-        Surface(
-            modifier = Modifier
-                .width(if (isExpanded) 240.dp else 64.dp)
-                .fillMaxHeight()
-                .padding(8.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = Color(0xFFECEEF2),
-            tonalElevation = 2.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally
-            ) {
-                // 顶部控制折叠与新建
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (isExpanded) Arrangement.SpaceBetween else Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { isExpanded = !isExpanded }) {
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.MenuOpen else Icons.Default.Menu,
-                            contentDescription = "Toggle Sidebar"
-                        )
-                    }
-                    if (isExpanded) {
-                        IconButton(onClick = { session?.loadUri("https://duckduckgo.com") }) {
-                            Icon(Icons.Default.Add, contentDescription = "New Tab")
-                        }
-                    }
-                }
+        // Zen / Arc 风格折叠侧边栏
+        TabletSidebar(
+            isExpanded = isSidebarExpanded,
+            onToggleExpand = { isSidebarExpanded = !isSidebarExpanded },
+            spaces = spaces,
+            currentSpaceId = currentSpaceId,
+            onSelectSpace = { tabManager.switchSpace(it) },
+            tabs = spaceTabs,
+            activeTabId = activeTabId,
+            onSelectTab = { tabManager.selectTab(it) },
+            onCloseTab = { tabManager.closeTab(it) },
+            onNewTab = { tabManager.createNewTab() },
+            onTogglePin = { tabManager.togglePinTab(it) }
+        )
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // 示例标签列表
-                TabItem(
-                    title = "Google Search",
-                    icon = Icons.Default.Language,
-                    isSelected = true,
-                    isExpanded = isExpanded,
-                    onClick = { session?.loadUri("https://www.google.com") }
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TabItem(
-                    title = "Mozilla Developer",
-                    icon = Icons.Default.Code,
-                    isSelected = false,
-                    isExpanded = isExpanded,
-                    onClick = { session?.loadUri("https://developer.mozilla.org") }
-                )
-            }
-        }
-
-        // 右侧网页主视口
+        // 右侧主体：顶栏 + 网页视口
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
                 .padding(end = 8.dp, top = 8.dp, bottom = 8.dp)
         ) {
-            // 顶栏轻量地址显示
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .padding(bottom = 8.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Secure",
-                        tint = Color(0xFF6C7A89),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = currentUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF2C3E50)
-                    )
-                }
-            }
+            BrowserToolbar(
+                activeTab = activeTab,
+                isSplitViewActive = secondaryTabId != null,
+                onNavigateUrl = { url -> activeTabId?.let { tabManager.loadUrl(it, url) } },
+                onBack = { activeTabId?.let { tabManager.goBack(it) } },
+                onForward = { activeTabId?.let { tabManager.goForward(it) } },
+                onRefresh = { activeTabId?.let { tabManager.reload(it) } },
+                onToggleSplitView = { tabManager.toggleSplitView() },
+                onTogglePin = { activeTabId?.let { tabManager.togglePinTab(it) } },
+                onOpenSyncSettings = { showSyncDialog = true }
+            )
 
-            // GeckoView 网页容器
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                color = Color.White
-            ) {
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(16.dp)),
-                    factory = { context ->
-                        GeckoView(context).apply {
-                            session?.let { setSession(it) }
-                        }
-                    }
-                )
-            }
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 网页视口 (支持单开 / Split View 双开分屏)
+            WebViewport(
+                primarySession = primarySession,
+                primaryTab = activeTab,
+                secondarySession = secondarySession,
+                secondaryTab = secondaryTab,
+                isSplitView = secondaryTabId != null,
+                onCloseSecondary = { tabManager.toggleSplitView() },
+                modifier = Modifier.weight(1f)
+            )
         }
     }
-}
 
-@Composable
-fun TabItem(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    isSelected: Boolean,
-    isExpanded: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(10.dp),
-        color = if (isSelected) Color(0xFFD6DBE4) else Color.Transparent
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (isExpanded) Arrangement.Start else Arrangement.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = if (isSelected) Color(0xFF1B263B) else Color(0xFF5C677D)
-            )
-            if (isExpanded) {
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isSelected) Color(0xFF1B263B) else Color(0xFF5C677D),
-                    maxLines = 1
-                )
-            }
-        }
+    // Firefox 同步配置弹窗
+    if (showSyncDialog) {
+        SyncSettingsDialog(onDismiss = { showSyncDialog = false })
     }
 }
