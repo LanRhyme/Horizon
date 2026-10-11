@@ -69,6 +69,7 @@ fun HorizonBrowserScreen(
     val activeTabId by tabManager.activeTabId.collectAsState()
     val secondaryTabId by tabManager.secondaryTabId.collectAsState()
     val currentSearchEngine by tabManager.searchEngine.collectAsState()
+    val trackingProtection by tabManager.trackingProtection.collectAsState()
     val popupState by extensionManager.popupState.collectAsState()
     val bookmarks by BookmarkHistoryManager.bookmarks.collectAsState()
 
@@ -262,6 +263,8 @@ fun HorizonBrowserScreen(
             onClose = { isSettingsDrawerOpen = false },
             currentEngine = currentSearchEngine,
             onSelectEngine = { tabManager.setSearchEngine(it) },
+            trackingProtection = trackingProtection,
+            onToggleTrackingProtection = { tabManager.setTrackingProtection(it) },
             extensionManager = extensionManager,
             initialCategory = settingsCategory,
             modifier = Modifier.align(Alignment.CenterEnd)

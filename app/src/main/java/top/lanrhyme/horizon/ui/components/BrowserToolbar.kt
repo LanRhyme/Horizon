@@ -55,6 +55,12 @@ fun BrowserToolbar(
     var isFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
+    LaunchedEffect(displayUrl, isFocused) {
+        if (!isFocused) {
+            textInput = displayUrl
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()

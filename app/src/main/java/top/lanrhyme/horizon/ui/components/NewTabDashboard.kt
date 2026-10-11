@@ -85,9 +85,9 @@ fun NewTabDashboard(
     ) {
         Column(
             modifier = Modifier
-                .widthIn(max = 680.dp)
+                .widthIn(max = 760.dp)
                 .fillMaxHeight()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
+                .padding(horizontal = 32.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -96,30 +96,30 @@ fun NewTabDashboard(
                 text = currentTime.first,
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 28.sp,
+                    fontSize = 32.sp,
                     letterSpacing = 0.5.sp
                 ),
                 color = MorandiPalette.TextPrimary
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "${currentTime.second}  ·  Horizon 专注沉浸式平板文档阅读",
                 style = MaterialTheme.typography.bodySmall,
                 color = MorandiPalette.TextSecondary,
-                fontSize = 12.sp
+                fontSize = 13.sp
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // 居中主搜索胶囊
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(24.dp),
+                    .height(52.dp),
+                shape = RoundedCornerShape(26.dp),
                 color = Color.White,
                 border = BorderStroke(1.dp, MorandiPalette.Border),
-                shadowElevation = 2.dp
+                shadowElevation = 3.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -193,22 +193,22 @@ fun NewTabDashboard(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .clickable { onNavigate(site.url) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         color = Color.White,
-                        border = BorderStroke(0.5.dp, MorandiPalette.BorderSubtle),
-                        shadowElevation = 1.dp
+                        border = BorderStroke(0.8.dp, MorandiPalette.BorderSubtle),
+                        shadowElevation = 1.5.dp
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                                .padding(vertical = 14.dp, horizontal = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(40.dp)
                                     .clip(CircleShape)
                                     .background(site.accentColor.copy(alpha = 0.12f)),
                                 contentAlignment = Alignment.Center
@@ -218,23 +218,23 @@ fun NewTabDashboard(
                                     AsyncImage(
                                         model = site.iconUrl,
                                         contentDescription = site.title,
-                                        modifier = Modifier.size(20.dp),
+                                        modifier = Modifier.size(22.dp),
                                         onError = { isImageError = true }
                                     )
                                 } else {
                                     Text(
                                         text = site.fallbackLetter,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
+                                        fontSize = 15.sp,
                                         color = site.accentColor
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = site.title,
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
                                 ),
                                 color = MorandiPalette.TextPrimary,
@@ -247,7 +247,7 @@ fun NewTabDashboard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // 底部快捷操作胶囊 (书签 / 历史 / 扩展)
             Row(
@@ -282,27 +282,31 @@ private fun DashboardActionPill(
 ) {
     Surface(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         color = Color.White,
-        border = BorderStroke(0.5.dp, MorandiPalette.BorderSubtle)
+        border = BorderStroke(0.8.dp, MorandiPalette.BorderSubtle),
+        shadowElevation = 1.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MorandiPalette.TextSecondary,
-                modifier = Modifier.size(14.dp)
+                tint = MorandiPalette.AccentBlue,
+                modifier = Modifier.size(15.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(7.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                color = MorandiPalette.TextSecondary
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = MorandiPalette.TextPrimary
             )
         }
     }

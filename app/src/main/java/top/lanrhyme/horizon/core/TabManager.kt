@@ -29,6 +29,7 @@ class TabManager(
         private const val KEY_SEARCH_ENGINE = "saved_search_engine"
         private const val KEY_ACTIVE_TAB_ID = "saved_active_tab_id"
         private const val KEY_CURRENT_SPACE_ID = "saved_current_space_id"
+        private const val KEY_TRACKING_PROTECTION = "saved_tracking_protection"
     }
 
     // 默认工作空间 Spaces
@@ -58,6 +59,10 @@ class TabManager(
     private val _searchEngine = MutableStateFlow("Bing")
     val searchEngine: StateFlow<String> = _searchEngine.asStateFlow()
 
+    // 强化跟踪保护开关 (Enhanced Tracking Protection)
+    private val _trackingProtection = MutableStateFlow(true)
+    val trackingProtection: StateFlow<Boolean> = _trackingProtection.asStateFlow()
+
     // 缓存 GeckoSession 实例，避免重复重建与销毁
     private val sessionMap = mutableMapOf<String, GeckoSession>()
 
@@ -69,6 +74,10 @@ class TabManager(
         // 读取搜索引擎
         val savedEngine = prefs.getString(KEY_SEARCH_ENGINE, "Bing") ?: "Bing"
         _searchEngine.value = savedEngine
+
+        // 读取防跟踪开关
+        val savedTracking = prefs.getBoolean(KEY_TRACKING_PROTECTION, true)
+        _trackingProtection.value = savedTracking
 
         // 读取 Spaces
         val spacesJson = prefs.getString(KEY_SPACES, null)
@@ -191,6 +200,7 @@ class TabManager(
         return sessionMap.getOrPut(tabId) {
             GeckoSession().apply {
                 val tab = _tabs.value.find { it.id == tabId }
+                settings.useTrackingProtection = _trackingProtection.value
                 open(geckoRuntime)
 
                 // 监听进度与加载状态
@@ -384,6 +394,15 @@ class TabManager(
     fun setSearchEngine(engine: String) {
         _searchEngine.value = engine
         prefs.edit().putString(KEY_SEARCH_ENGINE, engine).apply()
+    }
+
+    fun setTrackingProtection(enabled: Boolean) {
+        _trackingProtection.value = enabled
+        prefs.edit().putBoolean(KEY_TRACKING_PROTECTION, enabled).apply()
+        // 动态更新已打开会话的防跟踪策略
+        sessionMap.values.forEach { session ->
+            session.settings.useTrackingProtection = enabled
+        }
     }
 
     fun toggleDesktopMode(tabId: String) {

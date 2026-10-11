@@ -39,6 +39,8 @@ fun SettingsDrawer(
     onClose: () -> Unit,
     currentEngine: String,
     onSelectEngine: (String) -> Unit,
+    trackingProtection: Boolean,
+    onToggleTrackingProtection: (Boolean) -> Unit,
     extensionManager: ExtensionManager,
     modifier: Modifier = Modifier,
     initialCategory: SettingsCategory = SettingsCategory.EXTENSIONS
@@ -152,7 +154,9 @@ fun SettingsDrawer(
                         SettingsCategory.APPEARANCE -> AppearanceSettingsSection()
                         SettingsCategory.SEARCH_PRIVACY -> SearchPrivacySection(
                             currentEngine = currentEngine,
-                            onSelectEngine = onSelectEngine
+                            onSelectEngine = onSelectEngine,
+                            trackingProtection = trackingProtection,
+                            onToggleTrackingProtection = onToggleTrackingProtection
                         )
                         SettingsCategory.EXTENSIONS -> ExtensionsSection(extensionManager = extensionManager)
                         SettingsCategory.SYNC_ABOUT -> SyncAboutSection()
@@ -205,10 +209,11 @@ private fun AppearanceSettingsSection() {
 @Composable
 private fun SearchPrivacySection(
     currentEngine: String,
-    onSelectEngine: (String) -> Unit
+    onSelectEngine: (String) -> Unit,
+    trackingProtection: Boolean,
+    onToggleTrackingProtection: (Boolean) -> Unit
 ) {
     val engines = listOf("Bing", "Google", "DuckDuckGo", "Baidu")
-    var trackingProtectionEnabled by remember { mutableStateOf(true) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -264,8 +269,8 @@ private fun SearchPrivacySection(
                     Text("阻断已知社交跟踪器与跨站指纹追踪", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextSecondary, fontSize = 11.sp)
                 }
                 Switch(
-                    checked = trackingProtectionEnabled,
-                    onCheckedChange = { trackingProtectionEnabled = it },
+                    checked = trackingProtection,
+                    onCheckedChange = { onToggleTrackingProtection(it) },
                     colors = SwitchDefaults.colors(checkedTrackColor = MorandiPalette.AccentSage)
                 )
             }
