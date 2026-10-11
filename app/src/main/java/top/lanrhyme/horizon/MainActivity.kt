@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import top.lanrhyme.horizon.core.BookmarkHistoryManager
 import top.lanrhyme.horizon.core.TabManager
 import top.lanrhyme.horizon.extension.ExtensionManager
 import top.lanrhyme.horizon.ui.components.*
@@ -58,6 +59,8 @@ fun HorizonBrowserScreen(
     var isSidebarExpanded by remember { mutableStateOf(true) }
     var isToolsDrawerOpen by remember { mutableStateOf(false) }
     var isSettingsDrawerOpen by remember { mutableStateOf(false) }
+    var isBookmarksDrawerOpen by remember { mutableStateOf(false) }
+    var bookmarksInitialTab by remember { mutableStateOf(LibraryTab.BOOKMARKS) }
     var settingsCategory by remember { mutableStateOf(SettingsCategory.EXTENSIONS) }
 
     val spaces by tabManager.spaces.collectAsState()
@@ -67,6 +70,7 @@ fun HorizonBrowserScreen(
     val secondaryTabId by tabManager.secondaryTabId.collectAsState()
     val currentSearchEngine by tabManager.searchEngine.collectAsState()
     val popupState by extensionManager.popupState.collectAsState()
+    val bookmarks by BookmarkHistoryManager.bookmarks.collectAsState()
 
     // 过滤出属于当前空间的标签列表
     val spaceTabs = remember(tabs, currentSpaceId) {
@@ -79,6 +83,10 @@ fun HorizonBrowserScreen(
 
     val secondaryTab = remember(tabs, secondaryTabId) {
         tabs.find { it.id == secondaryTabId }
+    }
+
+    val isCurrentTabBookmarked = remember(activeTab?.url, bookmarks) {
+        activeTab?.url?.let { BookmarkHistoryManager.isBookmarked(it) } ?: false
     }
 
     val primarySession = remember(activeTabId) {
@@ -103,25 +111,31 @@ fun HorizonBrowserScreen(
                 spaces = spaces,
                 currentSpaceId = currentSpaceId,
                 onSelectSpace = { tabManager.switchSpace(it) },
+                onAddSpace = { name, color -> tabManager.addCustomSpace(name, color) },
                 tabs = spaceTabs,
                 activeTabId = activeTabId,
                 onSelectTab = { tabManager.selectTab(it) },
                 onCloseTab = { tabManager.closeTab(it) },
                 onNewTab = { tabManager.createNewTab() },
                 onTogglePin = { tabManager.togglePinTab(it) },
+                onMoveTabToSpace = { tabId, spaceId -> tabManager.moveTabToSpace(tabId, spaceId) },
+                onCloseOtherTabs = { tabId -> tabManager.closeOtherTabs(tabId) },
                 onOpenExtensions = {
                     settingsCategory = SettingsCategory.EXTENSIONS
                     isSettingsDrawerOpen = true
                     isToolsDrawerOpen = false
+                    isBookmarksDrawerOpen = false
                 },
                 onOpenTools = {
                     isToolsDrawerOpen = !isToolsDrawerOpen
                     isSettingsDrawerOpen = false
+                    isBookmarksDrawerOpen = false
                 },
                 onOpenSettings = {
                     settingsCategory = SettingsCategory.APPEARANCE
                     isSettingsDrawerOpen = true
                     isToolsDrawerOpen = false
+                    isBookmarksDrawerOpen = false
                 }
             )
 
@@ -152,18 +166,33 @@ fun HorizonBrowserScreen(
                         onToggleSplitView = { tabManager.toggleSplitView() },
                         onTogglePin = { activeTabId?.let { tabManager.togglePinTab(it) } },
                         onToggleDesktopMode = { activeTabId?.let { tabManager.toggleDesktopMode(it) } },
+                        onToggleReaderMode = { activeTabId?.let { tabManager.toggleReaderMode(it) } },
+                        isBookmarked = isCurrentTabBookmarked,
+                        onToggleBookmark = {
+                            activeTab?.let {
+                                BookmarkHistoryManager.toggleBookmark(it.title, it.url, it.faviconUrl)
+                            }
+                        },
+                        onOpenBookmarksHistory = {
+                            bookmarksInitialTab = LibraryTab.BOOKMARKS
+                            isBookmarksDrawerOpen = true
+                            isToolsDrawerOpen = false
+                            isSettingsDrawerOpen = false
+                        },
                         onOpenTools = {
                             isToolsDrawerOpen = !isToolsDrawerOpen
                             isSettingsDrawerOpen = false
+                            isBookmarksDrawerOpen = false
                         },
                         onOpenSyncSettings = {
                             settingsCategory = SettingsCategory.SYNC_ABOUT
                             isSettingsDrawerOpen = true
                             isToolsDrawerOpen = false
+                            isBookmarksDrawerOpen = false
                         }
                     )
 
-                    // 网页视口 (单屏 / Split View 双开分屏)
+                    // 网页视口 (单屏 / Split View 双开分屏，包含原生起始仪表盘)
                     WebViewport(
                         primarySession = primarySession,
                         primaryTab = activeTab,
@@ -171,6 +200,20 @@ fun HorizonBrowserScreen(
                         secondaryTab = secondaryTab,
                         isSplitView = secondaryTabId != null,
                         onCloseSecondary = { tabManager.toggleSplitView() },
+                        onNavigate = { url -> activeTabId?.let { tabManager.loadUrl(it, url) } },
+                        onOpenBookmarks = {
+                            bookmarksInitialTab = LibraryTab.BOOKMARKS
+                            isBookmarksDrawerOpen = true
+                        },
+                        onOpenHistory = {
+                            bookmarksInitialTab = LibraryTab.HISTORY
+                            isBookmarksDrawerOpen = true
+                        },
+                        onOpenExtensions = {
+                            settingsCategory = SettingsCategory.EXTENSIONS
+                            isSettingsDrawerOpen = true
+                        },
+                        currentEngine = currentSearchEngine,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -178,7 +221,7 @@ fun HorizonBrowserScreen(
         }
 
         // 抽屉展开时的半透明 Scrim 遮罩
-        val isAnyDrawerOpen = isToolsDrawerOpen || isSettingsDrawerOpen
+        val isAnyDrawerOpen = isToolsDrawerOpen || isSettingsDrawerOpen || isBookmarksDrawerOpen
         AnimatedVisibility(
             visible = isAnyDrawerOpen,
             enter = fadeIn(),
@@ -191,6 +234,7 @@ fun HorizonBrowserScreen(
                     .clickable {
                         isToolsDrawerOpen = false
                         isSettingsDrawerOpen = false
+                        isBookmarksDrawerOpen = false
                     }
             )
         }
@@ -220,6 +264,15 @@ fun HorizonBrowserScreen(
             onSelectEngine = { tabManager.setSearchEngine(it) },
             extensionManager = extensionManager,
             initialCategory = settingsCategory,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
+
+        // 书签与历史记录抽屉面板
+        BookmarksHistoryDrawer(
+            isOpen = isBookmarksDrawerOpen,
+            onClose = { isBookmarksDrawerOpen = false },
+            onNavigate = { url -> activeTabId?.let { tabManager.loadUrl(it, url) } },
+            initialTab = bookmarksInitialTab,
             modifier = Modifier.align(Alignment.CenterEnd)
         )
 

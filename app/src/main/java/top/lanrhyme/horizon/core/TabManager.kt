@@ -45,13 +45,25 @@ class TabManager(
     private val sessionMap = mutableMapOf<String, GeckoSession>()
 
     init {
-        // 创建初始默认标签
+        // 创建初始默认标签（起始仪表盘页）
         val initialTab = createNewTab(
             spaceId = "space_general",
-            url = "https://cn.bing.com",
-            title = "必应搜索"
+            url = "horizon://newtab",
+            title = "新标签页"
         )
         _activeTabId.value = initialTab.id
+    }
+
+    private fun extractFaviconUrl(rawUrl: String): String? {
+        return try {
+            val uri = android.net.Uri.parse(rawUrl)
+            val host = uri.host
+            if (!host.isNullOrBlank()) {
+                "https://www.google.com/s2/favicons?sz=64&domain_url=https://$host"
+            } else null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun getOrCreateSession(tabId: String): GeckoSession {
@@ -63,11 +75,28 @@ class TabManager(
                 // 监听进度与加载状态
                 progressDelegate = object : GeckoSession.ProgressDelegate {
                     override fun onPageStart(session: GeckoSession, url: String) {
-                        updateTab(tabId) { it.copy(url = url, isLoading = true, progress = 10) }
+                        val currentTab = _tabs.value.find { it.id == tabId }
+                        // 当标签处于原生起始仪表盘 (horizon://newtab) 时，忽略 GeckoSession 内部初始化的 about:blank
+                        if (currentTab?.url == "horizon://newtab" && url == "about:blank") {
+                            return
+                        }
+                        val fav = extractFaviconUrl(url)
+                        updateTab(tabId) { it.copy(url = url, isLoading = true, progress = 10, faviconUrl = fav) }
                     }
 
                     override fun onPageStop(session: GeckoSession, success: Boolean) {
-                        updateTab(tabId) { it.copy(isLoading = false, progress = 100) }
+                        val currentTab = _tabs.value.find { it.id == tabId }
+                        val fav = currentTab?.url?.let { extractFaviconUrl(it) }
+                        updateTab(tabId) { it.copy(isLoading = false, progress = 100, faviconUrl = fav) }
+
+                        // 记录到浏览历史
+                        if (currentTab != null && currentTab.url.isNotBlank() && currentTab.url != "horizon://newtab") {
+                            BookmarkHistoryManager.recordHistory(
+                                title = currentTab.title,
+                                url = currentTab.url,
+                                faviconUrl = fav
+                            )
+                        }
                     }
 
                     override fun onProgressChange(session: GeckoSession, progress: Int) {
@@ -94,7 +123,7 @@ class TabManager(
                     }
                 }
 
-                if (tab != null && tab.url.isNotBlank() && tab.url != "about:blank") {
+                if (tab != null && tab.url.isNotBlank() && tab.url != "about:blank" && tab.url != "horizon://newtab") {
                     loadUri(tab.url)
                 }
             }
@@ -109,13 +138,70 @@ class TabManager(
         }
     }
 
+    fun addCustomSpace(name: String, colorHex: Long) {
+        val newSpace = BrowserSpace(name = name, accentColorHex = colorHex)
+        _spaces.update { it + newSpace }
+        _currentSpaceId.value = newSpace.id
+    }
+
+    fun moveTabToSpace(tabId: String, newSpaceId: String) {
+        updateTab(tabId) { it.copy(spaceId = newSpaceId) }
+    }
+
+    fun closeOtherTabs(tabId: String) {
+        val currentSpaceTabs = _tabs.value.filter { it.spaceId == _currentSpaceId.value }
+        currentSpaceTabs.forEach {
+            if (it.id != tabId && !it.isPinned) {
+                closeTab(it.id)
+            }
+        }
+    }
+
+    fun toggleReaderMode(tabId: String) {
+        val tab = _tabs.value.find { it.id == tabId } ?: return
+        val newReaderState = !tab.isReaderMode
+        val session = sessionMap[tabId]
+        if (session != null) {
+            val script = """
+                javascript:(function(){
+                    var id = 'horizon-reader-style';
+                    var el = document.getElementById(id);
+                    if (el) {
+                        el.remove();
+                    } else {
+                        var style = document.createElement('style');
+                        style.id = id;
+                        style.textContent = `
+                            body {
+                                max-width: 820px !important;
+                                margin: 0 auto !important;
+                                padding: 40px 24px !important;
+                                font-size: 19px !important;
+                                line-height: 1.85 !important;
+                                background: #FAF9F6 !important;
+                                color: #2B2D42 !important;
+                            }
+                            aside, [class*="sidebar"], [class*="ad-"], [class*="advertisement"], [id*="ad-"], header:not(article header), footer {
+                                display: none !important;
+                            }
+                            img { max-width: 100% !important; border-radius: 8px !important; }
+                        `;
+                        document.head.appendChild(style);
+                    }
+                })();
+            """.trimIndent().replace("\n", "")
+            session.loadUri(script)
+        }
+        updateTab(tabId) { it.copy(isReaderMode = newReaderState) }
+    }
+
     fun selectTab(tabId: String) {
         _activeTabId.value = tabId
     }
 
     fun createNewTab(
         spaceId: String = _currentSpaceId.value,
-        url: String = "https://cn.bing.com",
+        url: String = "horizon://newtab",
         title: String = "新标签页"
     ): BrowserTab {
         val newTab = BrowserTab(

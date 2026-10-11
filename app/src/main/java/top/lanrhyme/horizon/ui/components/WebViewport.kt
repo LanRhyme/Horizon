@@ -27,6 +27,11 @@ fun WebViewport(
     secondaryTab: BrowserTab?,
     isSplitView: Boolean,
     onCloseSecondary: () -> Unit,
+    onNavigate: (String) -> Unit,
+    onOpenBookmarks: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenExtensions: () -> Unit,
+    currentEngine: String,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -40,7 +45,15 @@ fun WebViewport(
                 .fillMaxHeight()
                 .background(Color.White)
         ) {
-            if (primarySession != null) {
+            if (primaryTab?.url == "horizon://newtab") {
+                NewTabDashboard(
+                    onNavigate = onNavigate,
+                    onOpenBookmarks = onOpenBookmarks,
+                    onOpenHistory = onOpenHistory,
+                    onOpenExtensions = onOpenExtensions,
+                    currentEngine = currentEngine
+                )
+            } else if (primarySession != null) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
@@ -105,19 +118,29 @@ fun WebViewport(
                     }
                 }
 
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    factory = { context ->
-                        GeckoView(context).apply {
-                            setSession(secondarySession)
+                if (secondaryTab?.url == "horizon://newtab") {
+                    NewTabDashboard(
+                        onNavigate = onNavigate,
+                        onOpenBookmarks = onOpenBookmarks,
+                        onOpenHistory = onOpenHistory,
+                        onOpenExtensions = onOpenExtensions,
+                        currentEngine = currentEngine
+                    )
+                } else {
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        factory = { context ->
+                            GeckoView(context).apply {
+                                setSession(secondarySession)
+                            }
+                        },
+                        update = { geckoView ->
+                            geckoView.setSession(secondarySession)
                         }
-                    },
-                    update = { geckoView ->
-                        geckoView.setSession(secondarySession)
-                    }
-                )
+                    )
+                }
             }
         }
     }

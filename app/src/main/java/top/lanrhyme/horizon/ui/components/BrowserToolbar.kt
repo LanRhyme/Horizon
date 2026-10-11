@@ -39,11 +39,19 @@ fun BrowserToolbar(
     onToggleSplitView: () -> Unit,
     onTogglePin: () -> Unit,
     onToggleDesktopMode: () -> Unit,
+    onToggleReaderMode: () -> Unit,
+    isBookmarked: Boolean,
+    onToggleBookmark: () -> Unit,
+    onOpenBookmarksHistory: () -> Unit,
     onOpenTools: () -> Unit,
     onOpenSyncSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var textInput by remember(activeTab?.url) { mutableStateOf(activeTab?.url ?: "") }
+    val displayUrl = remember(activeTab?.url) {
+        val u = activeTab?.url ?: ""
+        if (u == "horizon://newtab" || u == "about:blank") "" else u
+    }
+    var textInput by remember(displayUrl) { mutableStateOf(displayUrl) }
     var isFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
@@ -194,6 +202,32 @@ fun BrowserToolbar(
                     )
                 }
 
+                // 文档免打扰阅读模式
+                IconButton(
+                    onClick = onToggleReaderMode,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MenuBook,
+                        contentDescription = "阅读模式",
+                        tint = if (activeTab?.isReaderMode == true) MorandiPalette.AccentSage else MorandiPalette.TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // 收藏书签五角星
+                IconButton(
+                    onClick = onToggleBookmark,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        contentDescription = "收藏书签",
+                        tint = if (isBookmarked) MorandiPalette.AccentAmber else MorandiPalette.TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
                 // 固定当前标签
                 IconButton(
                     onClick = onTogglePin,
@@ -216,6 +250,19 @@ fun BrowserToolbar(
                         imageVector = Icons.Default.VerticalSplit,
                         contentDescription = "同屏分屏",
                         tint = if (isSplitViewActive) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // 书签与历史面板
+                IconButton(
+                    onClick = onOpenBookmarksHistory,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bookmarks,
+                        contentDescription = "书签与历史",
+                        tint = MorandiPalette.TextSecondary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
