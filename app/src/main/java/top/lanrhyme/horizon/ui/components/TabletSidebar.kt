@@ -2,9 +2,9 @@ package top.lanrhyme.horizon.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,66 +51,123 @@ fun TabletSidebar(
     modifier: Modifier = Modifier
 ) {
     val sidebarWidth by animateDpAsState(
-        targetValue = if (isExpanded) 260.dp else 68.dp,
+        targetValue = if (isExpanded) 250.dp else 64.dp,
         label = "sidebar_width"
     )
 
     Surface(
         modifier = modifier
             .width(sidebarWidth)
-            .fillMaxHeight()
-            .padding(8.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = MorandiPalette.Surface,
-        tonalElevation = 1.dp
+            .fillMaxHeight(),
+        color = MorandiPalette.SidebarBg,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 顶栏操作区：展开/折叠、新建标签
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp),
-                horizontalArrangement = if (isExpanded) Arrangement.SpaceBetween else Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onToggleExpand) {
-                    Icon(
-                        imageVector = if (isExpanded) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
-                        contentDescription = "切换侧边栏",
-                        tint = MorandiPalette.TextPrimary
-                    )
-                }
-
-                if (isExpanded) {
-                    IconButton(
-                        onClick = onNewTab,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(MorandiPalette.SurfaceElevated, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "新建标签页",
-                            tint = MorandiPalette.AccentBlue,
-                            modifier = Modifier.size(20.dp)
+            // 顶栏：品牌标识与新建/折叠控制
+            if (isExpanded) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MorandiPalette.AccentBlue),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "H",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "HORIZON",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.2.sp,
+                            color = MorandiPalette.TextPrimary
                         )
                     }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 新建标签小按钮
+                        IconButton(
+                            onClick = onNewTab,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "新建标签",
+                                tint = MorandiPalette.AccentBlue,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // 折叠侧边栏
+                        IconButton(
+                            onClick = onToggleExpand,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.MenuOpen,
+                                contentDescription = "折叠",
+                                tint = MorandiPalette.TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            } else {
+                // 折叠态：简洁展开按钮
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MorandiPalette.SurfaceSubtle)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "展开侧边栏",
+                        tint = MorandiPalette.TextPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // 固定标签区 (Pinned Tabs)
             val pinnedTabs = tabs.filter { it.isPinned }
             if (pinnedTabs.isNotEmpty()) {
+                if (isExpanded) {
+                    Text(
+                        text = "已固定",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MorandiPalette.TextMuted,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 6.dp, bottom = 4.dp)
+                    )
+                }
+
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     items(pinnedTabs, key = { it.id }) { tab ->
                         TabRowItem(
@@ -122,18 +180,18 @@ fun TabletSidebar(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = MorandiPalette.Border, thickness = 0.5.dp)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                HorizontalDivider(color = MorandiPalette.BorderSubtle, thickness = 0.5.dp)
+                Spacer(modifier = Modifier.height(6.dp))
             }
 
-            // 当前空间普通标签列表
+            // 当前空间活动标签列表
             val regularTabs = tabs.filter { !it.isPinned }
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 items(regularTabs, key = { it.id }) { tab ->
                     TabRowItem(
@@ -147,115 +205,112 @@ fun TabletSidebar(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // 底部工作空间 Spaces 胶囊栏
-            if (isExpanded) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .background(MorandiPalette.SurfaceElevated, RoundedCornerShape(12.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    spaces.forEach { space ->
-                        val isCurrent = space.id == currentSpaceId
-                        Surface(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { onSelectSpace(space.id) },
-                            color = if (isCurrent) Color(space.accentColorHex).copy(alpha = 0.2f) else Color.Transparent
-                        ) {
-                            Text(
-                                text = space.name,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isCurrent) Color(space.accentColorHex) else MorandiPalette.TextSecondary
-                                )
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 一体化底部系统功能栏：扩展、工具箱、设置
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(38.dp)
-                        .background(MorandiPalette.SurfaceElevated, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onOpenExtensions,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Extension,
-                            contentDescription = "扩展中心",
-                            tint = MorandiPalette.TextSecondary,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onOpenTools,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Construction,
-                            contentDescription = "工具箱",
-                            tint = MorandiPalette.TextSecondary,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "设置",
-                            tint = MorandiPalette.TextSecondary,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                }
-            } else {
-                // 折叠态：紧凑空间圆点切换与垂直功能图标
+            // 底部一体化 Dock 容器
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MorandiPalette.SurfaceSubtle,
+                border = BorderStroke(0.5.dp, MorandiPalette.BorderSubtle)
+            ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    spaces.forEach { space ->
-                        val isCurrent = space.id == currentSpaceId
-                        Box(
+                    if (isExpanded) {
+                        // Spaces 切换胶囊
+                        Row(
                             modifier = Modifier
-                                .size(if (isCurrent) 12.dp else 8.dp)
-                                .clip(CircleShape)
-                                .background(Color(space.accentColorHex))
-                                .clickable { onSelectSpace(space.id) }
-                        )
-                    }
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            spaces.forEach { space ->
+                                val isCurrent = space.id == currentSpaceId
+                                Surface(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onSelectSpace(space.id) },
+                                    color = if (isCurrent) Color(space.accentColorHex).copy(alpha = 0.15f) else Color.Transparent,
+                                    border = if (isCurrent) BorderStroke(0.5.dp, Color(space.accentColorHex).copy(alpha = 0.4f)) else null,
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(space.accentColorHex))
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = space.name,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                                                color = if (isCurrent) Color(space.accentColorHex) else MorandiPalette.TextSecondary
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        HorizontalDivider(color = MorandiPalette.BorderSubtle, thickness = 0.5.dp)
+                        Spacer(modifier = Modifier.height(4.dp))
 
-                    IconButton(onClick = onOpenExtensions, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Extension, contentDescription = "扩展", tint = MorandiPalette.TextMuted, modifier = Modifier.size(16.dp))
-                    }
-                    IconButton(onClick = onOpenTools, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Construction, contentDescription = "工具箱", tint = MorandiPalette.TextMuted, modifier = Modifier.size(16.dp))
-                    }
-                    IconButton(onClick = onOpenSettings, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置", tint = MorandiPalette.TextMuted, modifier = Modifier.size(16.dp))
+                        // 扩展、工具、设置快捷栏
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = onOpenExtensions, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Extension, contentDescription = "扩展", tint = MorandiPalette.TextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                            IconButton(onClick = onOpenTools, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Construction, contentDescription = "工具箱", tint = MorandiPalette.TextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                            IconButton(onClick = onOpenSettings, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Settings, contentDescription = "设置", tint = MorandiPalette.TextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    } else {
+                        // 折叠态垂直紧凑点与小图标
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            spaces.forEach { space ->
+                                val isCurrent = space.id == currentSpaceId
+                                Box(
+                                    modifier = Modifier
+                                        .size(if (isCurrent) 10.dp else 6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(space.accentColorHex))
+                                        .clickable { onSelectSpace(space.id) }
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            IconButton(onClick = onOpenExtensions, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Extension, contentDescription = "扩展", tint = MorandiPalette.TextMuted, modifier = Modifier.size(14.dp))
+                            }
+                            IconButton(onClick = onOpenTools, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Construction, contentDescription = "工具箱", tint = MorandiPalette.TextMuted, modifier = Modifier.size(14.dp))
+                            }
+                            IconButton(onClick = onOpenSettings, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Settings, contentDescription = "设置", tint = MorandiPalette.TextMuted, modifier = Modifier.size(14.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -275,11 +330,13 @@ fun TabRowItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(38.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable { onSelect() },
         color = if (isSelected) MorandiPalette.TabSelectedBg else Color.Transparent,
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(10.dp),
+        shadowElevation = if (isSelected) 1.dp else 0.dp,
+        border = if (isSelected) BorderStroke(0.5.dp, MorandiPalette.BorderSubtle) else null
     ) {
         Row(
             modifier = Modifier
@@ -288,11 +345,23 @@ fun TabRowItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (isExpanded) Arrangement.Start else Arrangement.Center
         ) {
-            // 加载环 / 图标
+            // 选中态微型彩色竖标
+            if (isSelected && isExpanded) {
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height(16.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MorandiPalette.AccentBlue)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+
+            // 图标 / 加载圈
             if (tab.isLoading) {
                 CircularProgressIndicator(
                     progress = { tab.progress / 100f },
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(15.dp),
                     strokeWidth = 2.dp,
                     color = MorandiPalette.AccentBlue
                 )
@@ -300,8 +369,8 @@ fun TabRowItem(
                 Icon(
                     imageVector = if (tab.isPinned) Icons.Default.PushPin else Icons.Default.Language,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = if (isSelected) MorandiPalette.TextPrimary else MorandiPalette.TextSecondary
+                    modifier = Modifier.size(15.dp),
+                    tint = if (isSelected) MorandiPalette.AccentBlue else MorandiPalette.TextSecondary
                 )
             }
 
@@ -312,7 +381,7 @@ fun TabRowItem(
                     text = tab.title.ifBlank { "新标签页" },
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (isSelected) MorandiPalette.TextPrimary else MorandiPalette.TextSecondary
                     ),
@@ -323,12 +392,12 @@ fun TabRowItem(
                 // 关闭按钮
                 IconButton(
                     onClick = onClose,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "关闭",
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(12.dp),
                         tint = MorandiPalette.TextMuted
                     )
                 }

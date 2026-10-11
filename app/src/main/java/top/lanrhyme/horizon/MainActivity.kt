@@ -4,17 +4,24 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import top.lanrhyme.horizon.core.TabManager
 import top.lanrhyme.horizon.extension.ExtensionManager
-import top.lanrhyme.horizon.sync.FxaSyncManager
 import top.lanrhyme.horizon.ui.components.*
 import top.lanrhyme.horizon.ui.theme.MorandiPalette
 
@@ -85,11 +92,11 @@ fun HorizonBrowserScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MorandiPalette.Background)
+            .background(MorandiPalette.ScaffoldBg)
             .systemBarsPadding()
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
-            // Zen / Arc 风格紧凑折叠侧边栏
+            // 左侧：Arc / Zen 风格一体化侧边栏
             TabletSidebar(
                 isExpanded = isSidebarExpanded,
                 onToggleExpand = { isSidebarExpanded = !isSidebarExpanded },
@@ -118,47 +125,74 @@ fun HorizonBrowserScreen(
                 }
             )
 
-            // 右侧主体：顶栏 + 网页视口
-            Column(
+            // 右侧：一体化主浏览器窗口卡片 (Window Canvas)
+            Surface(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .padding(start = 2.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)
+                    .padding(start = 2.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, MorandiPalette.Border),
+                shadowElevation = 3.dp
             ) {
-                BrowserToolbar(
-                    activeTab = activeTab,
-                    isSplitViewActive = secondaryTabId != null,
-                    onNavigateUrl = { url -> activeTabId?.let { tabManager.loadUrl(it, url) } },
-                    onBack = { activeTabId?.let { tabManager.goBack(it) } },
-                    onForward = { activeTabId?.let { tabManager.goForward(it) } },
-                    onRefresh = { activeTabId?.let { tabManager.reload(it) } },
-                    onToggleSplitView = { tabManager.toggleSplitView() },
-                    onTogglePin = { activeTabId?.let { tabManager.togglePinTab(it) } },
-                    onToggleDesktopMode = { activeTabId?.let { tabManager.toggleDesktopMode(it) } },
-                    onOpenTools = {
-                        isToolsDrawerOpen = !isToolsDrawerOpen
-                        isSettingsDrawerOpen = false
-                    },
-                    onOpenSyncSettings = {
-                        settingsCategory = SettingsCategory.SYNC_ABOUT
-                        isSettingsDrawerOpen = true
-                        isToolsDrawerOpen = false
-                    }
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(18.dp))
+                ) {
+                    // 融入窗口顶部的工具栏
+                    BrowserToolbar(
+                        activeTab = activeTab,
+                        isSplitViewActive = secondaryTabId != null,
+                        onNavigateUrl = { url -> activeTabId?.let { tabManager.loadUrl(it, url) } },
+                        onBack = { activeTabId?.let { tabManager.goBack(it) } },
+                        onForward = { activeTabId?.let { tabManager.goForward(it) } },
+                        onRefresh = { activeTabId?.let { tabManager.reload(it) } },
+                        onToggleSplitView = { tabManager.toggleSplitView() },
+                        onTogglePin = { activeTabId?.let { tabManager.togglePinTab(it) } },
+                        onToggleDesktopMode = { activeTabId?.let { tabManager.toggleDesktopMode(it) } },
+                        onOpenTools = {
+                            isToolsDrawerOpen = !isToolsDrawerOpen
+                            isSettingsDrawerOpen = false
+                        },
+                        onOpenSyncSettings = {
+                            settingsCategory = SettingsCategory.SYNC_ABOUT
+                            isSettingsDrawerOpen = true
+                            isToolsDrawerOpen = false
+                        }
+                    )
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // 网页视口 (单屏 / Split View 双开分屏)
-                WebViewport(
-                    primarySession = primarySession,
-                    primaryTab = activeTab,
-                    secondarySession = secondarySession,
-                    secondaryTab = secondaryTab,
-                    isSplitView = secondaryTabId != null,
-                    onCloseSecondary = { tabManager.toggleSplitView() },
-                    modifier = Modifier.weight(1f)
-                )
+                    // 网页视口 (单屏 / Split View 双开分屏)
+                    WebViewport(
+                        primarySession = primarySession,
+                        primaryTab = activeTab,
+                        secondarySession = secondarySession,
+                        secondaryTab = secondaryTab,
+                        isSplitView = secondaryTabId != null,
+                        onCloseSecondary = { tabManager.toggleSplitView() },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
+        }
+
+        // 抽屉展开时的半透明 Scrim 遮罩
+        val isAnyDrawerOpen = isToolsDrawerOpen || isSettingsDrawerOpen
+        AnimatedVisibility(
+            visible = isAnyDrawerOpen,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.28f))
+                    .clickable {
+                        isToolsDrawerOpen = false
+                        isSettingsDrawerOpen = false
+                    }
+            )
         }
 
         // 工具箱右侧抽屉面板

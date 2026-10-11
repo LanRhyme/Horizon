@@ -4,21 +4,25 @@ import androidx.compose.ui.graphics.Color
 
 // 莫兰迪雅致配色规范
 object MorandiPalette {
-    val Background = Color(0xFFF4F5F7)
-    val Surface = Color(0xFFE9ECF0)
+    val ScaffoldBg = Color(0xFFE6EAEF)
+    val Background = Color(0xFFEDF1F5)
+    val SidebarBg = Color(0xFFF1F4F8)
+    val Surface = Color(0xFFE8ECF2)
+    val SurfaceSubtle = Color(0xFFF5F7FA)
     val SurfaceElevated = Color(0xFFFFFFFF)
-    val Border = Color(0xFFD6DBE2)
+    val Border = Color(0xFFD3D9E2)
+    val BorderSubtle = Color(0xFFDFE4EC)
 
-    val TextPrimary = Color(0xFF232A34)
-    val TextSecondary = Color(0xFF6B7785)
-    val TextMuted = Color(0xFF9AA5B4)
+    val TextPrimary = Color(0xFF1E252F)
+    val TextSecondary = Color(0xFF5A6778)
+    val TextMuted = Color(0xFF8E9BAA)
 
-    val AccentBlue = Color(0xFF5B7A9C)
-    val AccentSage = Color(0xFF6E8B7E)
-    val AccentRose = Color(0xFFA86F77)
-    val AccentAmber = Color(0xFFB58E62)
+    val AccentBlue = Color(0xFF4A729A)
+    val AccentSage = Color(0xFF5E8574)
+    val AccentRose = Color(0xFFA1636B)
+    val AccentAmber = Color(0xFFB08554)
 
-    val TabSelectedBg = Color(0xFFDCE2EB)
-    val TabHoverBg = Color(0xFFE2E7EE)
-    val TabCloseHover = Color(0xFFC7D0DE)
+    val TabSelectedBg = Color(0xFFFFFFFF)
+    val TabHoverBg = Color(0xFFE5EBF2)
+    val TabCloseHover = Color(0xFFCBD5E2)
 }
