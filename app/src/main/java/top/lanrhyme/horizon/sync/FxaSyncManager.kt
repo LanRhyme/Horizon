@@ -268,21 +268,25 @@ object FxaSyncManager {
     fun requestAuthUrl(onUrlReady: (String) -> Unit) {
         val manager = accountManager
         if (manager == null) {
+            android.util.Log.w("HorizonFxa", "accountManager is null, using fallback url")
             onUrlReady(getFallbackAuthUrl())
             return
         }
         scope.launch(Dispatchers.IO) {
             try {
+                android.util.Log.d("HorizonFxa", "Calling manager.beginAuthentication...")
                 val entryPoint = object : FxAEntryPoint {
                     override val entryName: String = "settings"
                 }
                 val authUrl = manager.beginAuthentication(
                     entrypoint = entryPoint
                 )
+                android.util.Log.d("HorizonFxa", "beginAuthentication result: $authUrl")
                 withContext(Dispatchers.Main) {
                     if (!authUrl.isNullOrBlank()) {
                         onUrlReady(authUrl)
                     } else {
+                        android.util.Log.w("HorizonFxa", "beginAuthentication returned null or blank, using fallback")
                         onUrlReady(getFallbackAuthUrl())
                     }
                 }
@@ -296,17 +300,66 @@ object FxaSyncManager {
     }
 
     private fun getFallbackAuthUrl(): String {
-        val encodedRedirect = Uri.encode(REDIRECT_URI)
-        val encodedScope = Uri.encode("profile https://identity.mozilla.com/apps/oldsync")
-        return "https://accounts.firefox.com/authorization?client_id=$FXA_CLIENT_ID&scope=$encodedScope&redirect_uri=$encodedRedirect&action=signin"
+        // 生成标准 PKCE code_verifier & code_challenge
+        val verifierBytes = ByteArray(32)
+        java.security.SecureRandom().nextBytes(verifierBytes)
+        val verifier = android.util.Base64.encodeToString(verifierBytes, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val challengeBytes = md.digest(verifier.toByteArray(Charsets.US_ASCII))
+        val challenge = android.util.Base64.encodeToString(challengeBytes, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+
+        val stateBytes = ByteArray(16)
+        java.security.SecureRandom().nextBytes(stateBytes)
+        val state = android.util.Base64.encodeToString(stateBytes, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+
+        // 生成标准 EC P-256 JWK
+        val kpg = java.security.KeyPairGenerator.getInstance("EC")
+        kpg.initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+        val kp = kpg.generateKeyPair()
+        val pub = kp.public as java.security.interfaces.ECPublicKey
+        val w = pub.w
+
+        fun bigIntToBytes(bi: java.math.BigInteger): ByteArray {
+            val raw = bi.toByteArray()
+            return when {
+                raw.size == 32 -> raw
+                raw.size > 32 -> raw.copyOfRange(raw.size - 32, raw.size)
+                else -> ByteArray(32).apply { System.arraycopy(raw, 0, this, 32 - raw.size, raw.size) }
+            }
+        }
+
+        val xB64 = android.util.Base64.encodeToString(bigIntToBytes(w.affineX), android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+        val yB64 = android.util.Base64.encodeToString(bigIntToBytes(w.affineY), android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+
+        val jwkJson = """{"kty":"EC","crv":"P-256","x":"$xB64","y":"$yB64"}"""
+        val keysJwk = android.util.Base64.encodeToString(jwkJson.toByteArray(Charsets.UTF_8), android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+
+        // 缓存 fallback PKCE 凭据
+        prefs?.edit()
+            ?.putString("fallback_code_verifier", verifier)
+            ?.putString("fallback_state", state)
+            ?.apply()
+
+        val uriBuilder = Uri.parse("https://accounts.firefox.com/authorization").buildUpon()
+            .appendQueryParameter("action", "email")
+            .appendQueryParameter("response_type", "code")
+            .appendQueryParameter("entrypoint", "settings")
+            .appendQueryParameter("client_id", FXA_CLIENT_ID)
+            .appendQueryParameter("state", state)
+            .appendQueryParameter("code_challenge_method", "S256")
+            .appendQueryParameter("code_challenge", challenge)
+            .appendQueryParameter("access_type", "offline")
+            .appendQueryParameter("keys_jwk", keysJwk)
+            .appendQueryParameter("scope", "profile https://identity.mozilla.com/apps/oldsync")
+            .appendQueryParameter("redirect_uri", REDIRECT_URI)
+
+        return uriBuilder.build().toString()
     }
 
     // 处理 OAuth 回调参数 (code, state) 或回调 Uri
     fun handleAuthCallback(uriString: String, onComplete: (Boolean) -> Unit) {
-        val manager = accountManager ?: run {
-            onComplete(false)
-            return
-        }
+        val manager = accountManager
         scope.launch(Dispatchers.IO) {
             try {
                 val uri = Uri.parse(uriString)
@@ -314,20 +367,106 @@ object FxaSyncManager {
                 val state = uri.getQueryParameter("state")
 
                 if (code.isNullOrBlank() || state.isNullOrBlank()) {
+                    android.util.Log.w("HorizonFxa", "Callback missing code or state: $uriString")
                     withContext(Dispatchers.Main) { onComplete(false) }
                     return@launch
                 }
 
-                val authData = FxaAuthData(
-                    authType = AuthType.Signin,
-                    code = code,
-                    state = state,
-                    declinedEngines = emptySet()
-                )
+                android.util.Log.d("HorizonFxa", "Handling OAuth callback: code=$code, state=$state")
 
-                val success = manager.finishAuthentication(authData)
+                // 优先尝试使用 FxaAccountManager.finishAuthentication
+                var success = false
+                if (manager != null) {
+                    try {
+                        val authData = FxaAuthData(
+                            authType = AuthType.Signin,
+                            code = code,
+                            state = state,
+                            declinedEngines = emptySet()
+                        )
+                        success = manager.finishAuthentication(authData)
+                        android.util.Log.d("HorizonFxa", "manager.finishAuthentication result: $success")
+                    } catch (e: Exception) {
+                        android.util.Log.w("HorizonFxa", "manager.finishAuthentication error, trying token exchange fallback", e)
+                    }
+                }
+
+                // 如果 manager 处于 Disconnected 或未知状态导致 finishAuthentication 失败，通过标准 PKCE 端点置换 Token
+                if (!success) {
+                    val verifier = prefs?.getString("fallback_code_verifier", null) ?: ""
+                    android.util.Log.d("HorizonFxa", "Attempting fallback token exchange with verifier length: ${verifier.length}")
+
+                    val tokenUrl = "https://oauth.accounts.firefox.com/v1/token"
+                    val payload = JSONObject().apply {
+                        put("client_id", FXA_CLIENT_ID)
+                        put("code", code)
+                        put("code_verifier", verifier)
+                        put("grant_type", "authorization_code")
+                    }
+
+                    val conn = (java.net.URL(tokenUrl).openConnection() as java.net.HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json")
+                        setRequestProperty("Accept", "application/json")
+                        connectTimeout = 15000
+                        readTimeout = 15000
+                    }
+
+                    conn.outputStream.use { os ->
+                        os.write(payload.toString().toByteArray(Charsets.UTF_8))
+                        os.flush()
+                    }
+
+                    val responseCode = conn.responseCode
+                    android.util.Log.d("HorizonFxa", "Token exchange HTTP response: $responseCode")
+                    if (responseCode in 200..299) {
+                        val respText = conn.inputStream.bufferedReader().use { it.readText() }
+                        val respJson = JSONObject(respText)
+                        val accessToken = respJson.optString("access_token", null)
+                        val refreshToken = respJson.optString("refresh_token", null)
+
+                        // 获取个人资料 (Profile)
+                        var userEmail = "已连接 Firefox 账户"
+                        var avatarUrl: String? = null
+                        if (!accessToken.isNullOrBlank()) {
+                            try {
+                                val profConn = (java.net.URL("https://profile.accounts.firefox.com/v1/profile").openConnection() as java.net.HttpURLConnection).apply {
+                                    requestMethod = "GET"
+                                    setRequestProperty("Authorization", "Bearer $accessToken")
+                                    connectTimeout = 10000
+                                    readTimeout = 10000
+                                }
+                                if (profConn.responseCode in 200..299) {
+                                    val profText = profConn.inputStream.bufferedReader().use { it.readText() }
+                                    val profJson = JSONObject(profText)
+                                    userEmail = profJson.optString("email", userEmail)
+                                    avatarUrl = profJson.optString("avatar", null)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.w("HorizonFxa", "Error fetching profile", e)
+                            }
+                        }
+
+                        withContext(Dispatchers.Main) {
+                            _accountState.value = _accountState.value.copy(
+                                isLoggedIn = true,
+                                userEmail = userEmail,
+                                avatarUrl = avatarUrl
+                            )
+                            saveLocalAccountState()
+                            onComplete(true)
+                        }
+                        triggerSync()
+                        return@launch
+                    } else {
+                        val errText = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                        android.util.Log.e("HorizonFxa", "Token exchange error ($responseCode): $errText")
+                    }
+                }
+
                 if (success) {
-                    val profile = manager.accountProfile()
+                    val profile = manager?.accountProfile()
                     withContext(Dispatchers.Main) {
                         _accountState.value = _accountState.value.copy(
                             isLoggedIn = true,
@@ -342,7 +481,7 @@ object FxaSyncManager {
                     withContext(Dispatchers.Main) { onComplete(false) }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("HorizonFxa", "Error in handleAuthCallback", e)
                 withContext(Dispatchers.Main) { onComplete(false) }
             }
         }

@@ -25,6 +25,14 @@ class HorizonApp : Application() {
             .build()
         geckoRuntime = GeckoRuntime.create(this, settings)
 
+        // 注册 Mozilla Components 日志输出到 Android Logcat
+        try {
+            mozilla.components.support.base.log.Log.addSink(
+                mozilla.components.support.base.log.sink.AndroidLogSink("HorizonMoz")
+            )
+            mozilla.components.support.base.log.Log.logLevel = mozilla.components.support.base.log.Log.Priority.DEBUG
+        } catch (_: Exception) {}
+
         // 初始化本地存储、下载中心与跨端同步管理器
         top.lanrhyme.horizon.core.BookmarkHistoryManager.init(this)
         top.lanrhyme.horizon.core.DownloadManager.init(this)
