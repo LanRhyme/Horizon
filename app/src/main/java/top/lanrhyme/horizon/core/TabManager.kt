@@ -210,6 +210,20 @@ class TabManager(
                 // 监听进度与加载状态
                 progressDelegate = object : GeckoSession.ProgressDelegate {
                     override fun onPageStart(session: GeckoSession, url: String) {
+                        // 拦截官方 Firefox Accounts 认证成功重定向
+                        if (url.startsWith("https://accounts.firefox.com/oauth/success/a2270f727f45f648") || url.startsWith("horizon://fxa-callback")) {
+                            top.lanrhyme.horizon.sync.FxaSyncManager.handleAuthCallback(url) { success ->
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    val msg = if (success) "Firefox 账号已成功同步！" else "OAuth 凭据置换失败，请重试"
+                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                                    if (success) {
+                                        // 登录成功后跳回原生新标签页
+                                        loadUrl(tabId, "horizon://newtab")
+                                    }
+                                }
+                            }
+                        }
+
                         val currentTab = _tabs.value.find { it.id == tabId }
                         // 当标签处于原生起始仪表盘 (horizon://newtab) 时，忽略 GeckoSession 内部初始化的 about:blank
                         if (currentTab?.url == "horizon://newtab" && url == "about:blank") {

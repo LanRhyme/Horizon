@@ -56,8 +56,8 @@ object FxaSyncManager {
 
     private const val PREFS_NAME = "horizon_fxa_sync"
     private const val KEY_SYNC_DATA = "fxa_account_data"
-    const val FXA_CLIENT_ID = "06b12a024849e77b"
-    const val REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
+    const val FXA_CLIENT_ID = "a2270f727f45f648"
+    const val REDIRECT_URI = "https://accounts.firefox.com/oauth/success/a2270f727f45f648"
 
     private var appContext: Context? = null
     private var prefs: SharedPreferences? = null
