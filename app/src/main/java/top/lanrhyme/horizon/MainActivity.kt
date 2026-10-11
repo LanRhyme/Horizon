@@ -70,6 +70,7 @@ fun HorizonBrowserScreen(
     val secondaryTabId by tabManager.secondaryTabId.collectAsState()
     val currentSearchEngine by tabManager.searchEngine.collectAsState()
     val trackingProtection by tabManager.trackingProtection.collectAsState()
+    val findInPageState by tabManager.findInPageState.collectAsState()
     val popupState by extensionManager.popupState.collectAsState()
     val bookmarks by BookmarkHistoryManager.bookmarks.collectAsState()
 
@@ -151,47 +152,49 @@ fun HorizonBrowserScreen(
                 border = BorderStroke(1.dp, MorandiPalette.Border),
                 shadowElevation = 3.dp
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(18.dp))
-                ) {
-                    // 融入窗口顶部的工具栏
-                    BrowserToolbar(
-                        activeTab = activeTab,
-                        isSplitViewActive = secondaryTabId != null,
-                        onNavigateUrl = { url -> activeTabId?.let { tabManager.loadUrl(it, url) } },
-                        onBack = { activeTabId?.let { tabManager.goBack(it) } },
-                        onForward = { activeTabId?.let { tabManager.goForward(it) } },
-                        onRefresh = { activeTabId?.let { tabManager.reload(it) } },
-                        onToggleSplitView = { tabManager.toggleSplitView() },
-                        onTogglePin = { activeTabId?.let { tabManager.togglePinTab(it) } },
-                        onToggleDesktopMode = { activeTabId?.let { tabManager.toggleDesktopMode(it) } },
-                        onToggleReaderMode = { activeTabId?.let { tabManager.toggleReaderMode(it) } },
-                        isBookmarked = isCurrentTabBookmarked,
-                        onToggleBookmark = {
-                            activeTab?.let {
-                                BookmarkHistoryManager.toggleBookmark(it.title, it.url, it.faviconUrl)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(18.dp))
+                    ) {
+                        // 融入窗口顶部的工具栏
+                        BrowserToolbar(
+                            activeTab = activeTab,
+                            isSplitViewActive = secondaryTabId != null,
+                            onNavigateUrl = { url -> activeTabId?.let { tabManager.loadUrl(it, url) } },
+                            onBack = { activeTabId?.let { tabManager.goBack(it) } },
+                            onForward = { activeTabId?.let { tabManager.goForward(it) } },
+                            onRefresh = { activeTabId?.let { tabManager.reload(it) } },
+                            onToggleSplitView = { tabManager.toggleSplitView() },
+                            onTogglePin = { activeTabId?.let { tabManager.togglePinTab(it) } },
+                            onToggleDesktopMode = { activeTabId?.let { tabManager.toggleDesktopMode(it) } },
+                            onToggleReaderMode = { activeTabId?.let { tabManager.toggleReaderMode(it) } },
+                            isBookmarked = isCurrentTabBookmarked,
+                            onToggleBookmark = {
+                                activeTab?.let {
+                                    BookmarkHistoryManager.toggleBookmark(it.title, it.url, it.faviconUrl)
+                                }
+                            },
+                            onOpenBookmarksHistory = {
+                                bookmarksInitialTab = LibraryTab.BOOKMARKS
+                                isBookmarksDrawerOpen = true
+                                isToolsDrawerOpen = false
+                                isSettingsDrawerOpen = false
+                            },
+                            onOpenFindInPage = { tabManager.openFindInPage() },
+                            onOpenTools = {
+                                isToolsDrawerOpen = !isToolsDrawerOpen
+                                isSettingsDrawerOpen = false
+                                isBookmarksDrawerOpen = false
+                            },
+                            onOpenSyncSettings = {
+                                settingsCategory = SettingsCategory.SYNC_ABOUT
+                                isSettingsDrawerOpen = true
+                                isToolsDrawerOpen = false
+                                isBookmarksDrawerOpen = false
                             }
-                        },
-                        onOpenBookmarksHistory = {
-                            bookmarksInitialTab = LibraryTab.BOOKMARKS
-                            isBookmarksDrawerOpen = true
-                            isToolsDrawerOpen = false
-                            isSettingsDrawerOpen = false
-                        },
-                        onOpenTools = {
-                            isToolsDrawerOpen = !isToolsDrawerOpen
-                            isSettingsDrawerOpen = false
-                            isBookmarksDrawerOpen = false
-                        },
-                        onOpenSyncSettings = {
-                            settingsCategory = SettingsCategory.SYNC_ABOUT
-                            isSettingsDrawerOpen = true
-                            isToolsDrawerOpen = false
-                            isBookmarksDrawerOpen = false
-                        }
-                    )
+                        )
 
                     // 网页视口 (单屏 / Split View 双开分屏，包含原生起始仪表盘)
                     WebViewport(
@@ -218,44 +221,56 @@ fun HorizonBrowserScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                // 网页视口顶部悬浮的页内查找栏 (Find in Page)
+                FindInPageBar(
+                    state = findInPageState,
+                    onQueryChange = { tabManager.findText(it) },
+                    onFindNext = { tabManager.findNext() },
+                    onFindPrevious = { tabManager.findPrevious() },
+                    onClose = { tabManager.closeFindInPage() },
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
             }
         }
+    }
 
-        // 抽屉展开时的半透明 Scrim 遮罩
-        val isAnyDrawerOpen = isToolsDrawerOpen || isSettingsDrawerOpen || isBookmarksDrawerOpen
-        AnimatedVisibility(
-            visible = isAnyDrawerOpen,
-            enter = fadeIn(),
-            exit = fadeOut()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.28f))
-                    .clickable {
-                        isToolsDrawerOpen = false
-                        isSettingsDrawerOpen = false
-                        isBookmarksDrawerOpen = false
-                    }
-            )
-        }
-
-        // 工具箱右侧抽屉面板
-        ToolsDrawer(
-            isOpen = isToolsDrawerOpen,
-            onClose = { isToolsDrawerOpen = false },
-            activeTab = activeTab,
-            onToggleDesktopMode = { activeTabId?.let { tabManager.toggleDesktopMode(it) } },
-            onViewSource = { activeTabId?.let { tabManager.viewSource(it) } },
-            onClearData = { tabManager.clearBrowsingData() },
-            onNewTab = { tabManager.createNewTab() },
-            onOpenExtensions = {
-                settingsCategory = SettingsCategory.EXTENSIONS
-                isSettingsDrawerOpen = true
-                isToolsDrawerOpen = false
-            },
-            modifier = Modifier.align(Alignment.CenterEnd)
+    // 抽屉展开时的半透明 Scrim 遮罩
+    val isAnyDrawerOpen = isToolsDrawerOpen || isSettingsDrawerOpen || isBookmarksDrawerOpen
+    AnimatedVisibility(
+        visible = isAnyDrawerOpen,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.28f))
+                .clickable {
+                    isToolsDrawerOpen = false
+                    isSettingsDrawerOpen = false
+                    isBookmarksDrawerOpen = false
+                }
         )
+    }
+
+    // 工具箱右侧抽屉面板
+    ToolsDrawer(
+        isOpen = isToolsDrawerOpen,
+        onClose = { isToolsDrawerOpen = false },
+        activeTab = activeTab,
+        onToggleDesktopMode = { activeTabId?.let { tabManager.toggleDesktopMode(it) } },
+        onViewSource = { activeTabId?.let { tabManager.viewSource(it) } },
+        onClearData = { tabManager.clearBrowsingData() },
+        onNewTab = { tabManager.createNewTab() },
+        onOpenExtensions = {
+            settingsCategory = SettingsCategory.EXTENSIONS
+            isSettingsDrawerOpen = true
+            isToolsDrawerOpen = false
+        },
+        onOpenFindInPage = { tabManager.openFindInPage() },
+        modifier = Modifier.align(Alignment.CenterEnd)
+    )
 
         // 设置中心抽屉面板 (外观/搜索隐私/扩展/同步与关于)
         SettingsDrawer(

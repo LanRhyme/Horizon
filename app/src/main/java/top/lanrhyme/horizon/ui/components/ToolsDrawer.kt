@@ -31,6 +31,7 @@ fun ToolsDrawer(
     onClearData: () -> Unit,
     onNewTab: () -> Unit,
     onOpenExtensions: () -> Unit,
+    onOpenFindInPage: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -124,6 +125,17 @@ fun ToolsDrawer(
                             )
                         },
                         onClick = onToggleDesktopMode
+                    )
+
+                    // 页内查找
+                    ToolCardItem(
+                        icon = Icons.Default.FindInPage,
+                        title = "在页面中查找",
+                        description = "搜索页面关键字并高亮匹配位置",
+                        onClick = {
+                            onOpenFindInPage()
+                            onClose()
+                        }
                     )
 
                     // 查看网页源代码

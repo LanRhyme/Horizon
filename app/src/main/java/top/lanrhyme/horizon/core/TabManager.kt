@@ -63,6 +63,10 @@ class TabManager(
     private val _trackingProtection = MutableStateFlow(true)
     val trackingProtection: StateFlow<Boolean> = _trackingProtection.asStateFlow()
 
+    // 页内查找状态 (Find in Page)
+    private val _findInPageState = MutableStateFlow(top.lanrhyme.horizon.model.FindInPageState())
+    val findInPageState: StateFlow<top.lanrhyme.horizon.model.FindInPageState> = _findInPageState.asStateFlow()
+
     // 缓存 GeckoSession 实例，避免重复重建与销毁
     private val sessionMap = mutableMapOf<String, GeckoSession>()
 
@@ -251,6 +255,19 @@ class TabManager(
                         if (!title.isNullOrBlank()) {
                             updateTab(tabId) { it.copy(title = title) }
                         }
+                    }
+
+                    override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
+                        val disposition = response.headers["content-disposition"]
+                        val filename = if (!disposition.isNullOrBlank() && disposition.contains("filename=")) {
+                            disposition.substringAfter("filename=").trim('"', ' ', ';')
+                        } else null
+                        DownloadManager.startDownload(
+                            url = response.uri,
+                            suggestedFileName = filename,
+                            mimeType = response.headers["content-type"],
+                            responseStream = response.body
+                        )
                     }
                 }
 
@@ -498,6 +515,68 @@ class TabManager(
                 val activeId = _activeTabId.value
                 value = tabsList.find { it.id == activeId }
             }
+        }
+    }
+
+    // 页内查找控制
+    fun openFindInPage() {
+        _findInPageState.update { it.copy(isActive = true) }
+    }
+
+    fun closeFindInPage() {
+        val activeId = _activeTabId.value
+        if (activeId != null) {
+            sessionMap[activeId]?.finder?.clear()
+        }
+        _findInPageState.value = top.lanrhyme.horizon.model.FindInPageState(isActive = false)
+    }
+
+    fun findText(query: String, forward: Boolean = true) {
+        val activeId = _activeTabId.value ?: return
+        val session = sessionMap[activeId] ?: return
+        _findInPageState.update { it.copy(query = query) }
+
+        if (query.isBlank()) {
+            session.finder.clear()
+            _findInPageState.update { it.copy(currentMatch = 0, totalMatches = 0) }
+            return
+        }
+
+        val flags = if (forward) {
+            GeckoSession.FINDER_FIND_FORWARD or GeckoSession.FINDER_DISPLAY_HIGHLIGHT_ALL
+        } else {
+            GeckoSession.FINDER_FIND_BACKWARDS or GeckoSession.FINDER_DISPLAY_HIGHLIGHT_ALL
+        }
+
+        session.finder.find(query, flags).then({ result ->
+            if (result != null) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    _findInPageState.update {
+                        it.copy(
+                            currentMatch = result.current,
+                            totalMatches = result.total,
+                            wrapped = result.wrapped
+                        )
+                    }
+                }
+            }
+            org.mozilla.geckoview.GeckoResult.fromValue(result)
+        }, { error ->
+            org.mozilla.geckoview.GeckoResult.fromException<GeckoSession.FinderResult>(error)
+        })
+    }
+
+    fun findNext() {
+        val q = _findInPageState.value.query
+        if (q.isNotBlank()) {
+            findText(q, forward = true)
+        }
+    }
+
+    fun findPrevious() {
+        val q = _findInPageState.value.query
+        if (q.isNotBlank()) {
+            findText(q, forward = false)
         }
     }
 

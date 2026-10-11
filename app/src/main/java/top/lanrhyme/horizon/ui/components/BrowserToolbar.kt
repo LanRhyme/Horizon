@@ -43,6 +43,7 @@ fun BrowserToolbar(
     isBookmarked: Boolean,
     onToggleBookmark: () -> Unit,
     onOpenBookmarksHistory: () -> Unit,
+    onOpenFindInPage: () -> Unit,
     onOpenTools: () -> Unit,
     onOpenSyncSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -260,7 +261,7 @@ fun BrowserToolbar(
                     )
                 }
 
-                // 书签与历史面板
+                // 书签、历史与下载面板
                 IconButton(
                     onClick = onOpenBookmarksHistory,
                     modifier = Modifier.size(28.dp)
@@ -268,6 +269,19 @@ fun BrowserToolbar(
                     Icon(
                         imageVector = Icons.Default.Bookmarks,
                         contentDescription = "书签与历史",
+                        tint = MorandiPalette.TextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // 页内查找快捷按钮
+                IconButton(
+                    onClick = onOpenFindInPage,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FindInPage,
+                        contentDescription = "页内查找",
                         tint = MorandiPalette.TextSecondary,
                         modifier = Modifier.size(16.dp)
                     )
