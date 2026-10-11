@@ -47,6 +47,24 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme == "horizon" && data.host == "fxa-callback") {
+            top.lanrhyme.horizon.sync.FxaSyncManager.handleAuthCallback(data.toString()) { success ->
+                val msg = if (success) "Firefox 账号授权登录成功" else "Firefox 账号授权失败，请重试"
+                android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }
 
@@ -281,6 +299,9 @@ fun HorizonBrowserScreen(
             trackingProtection = trackingProtection,
             onToggleTrackingProtection = { tabManager.setTrackingProtection(it) },
             extensionManager = extensionManager,
+            onOpenUrl = { url ->
+                activeTabId?.let { tabManager.loadUrl(it, url) }
+            },
             initialCategory = settingsCategory,
             modifier = Modifier.align(Alignment.CenterEnd)
         )

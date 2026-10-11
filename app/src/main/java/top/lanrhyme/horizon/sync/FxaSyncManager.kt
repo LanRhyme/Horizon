@@ -2,14 +2,24 @@ package top.lanrhyme.horizon.sync
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import mozilla.appservices.fxaclient.FxaConfig
+import mozilla.appservices.fxaclient.FxaServer
+import mozilla.components.browser.storage.sync.RemoteTabsStorage
+import mozilla.components.concept.base.crash.Breadcrumb
+import mozilla.components.concept.base.crash.CrashReporting
+import mozilla.components.concept.sync.*
+import mozilla.components.service.fxa.FxaAuthData
+import mozilla.components.service.fxa.manager.FxaAccountManager
+import mozilla.components.service.fxa.manager.ext.withConstellationIfExists
+import org.json.JSONArray
 import org.json.JSONObject
 import top.lanrhyme.horizon.core.BookmarkHistoryManager
 import top.lanrhyme.horizon.model.BookmarkItem
-import top.lanrhyme.horizon.model.HistoryItem
 
 data class RemoteTab(
     val id: String = java.util.UUID.randomUUID().toString(),
@@ -38,91 +48,125 @@ data class SyncAccountState(
     val syncTabsEnabled: Boolean = true,
     val syncPasswordsEnabled: Boolean = true,
     val autoSyncEnabled: Boolean = true,
-    val remoteDevices: List<RemoteDevice> = emptyList()
+    val remoteDevices: List<RemoteDevice> = emptyList(),
+    val authUrl: String? = null
 )
 
 object FxaSyncManager {
 
     private const val PREFS_NAME = "horizon_fxa_sync"
     private const val KEY_SYNC_DATA = "fxa_account_data"
+    const val FXA_CLIENT_ID = "06b12a024849e77b"
+    const val REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
+
+    private var appContext: Context? = null
     private var prefs: SharedPreferences? = null
 
-    private val defaultRemoteDevices = listOf(
-        RemoteDevice(
-            id = "device_pc",
-            name = "Arch Linux Desktop",
-            deviceType = "desktop",
-            lastSyncTime = "10 分钟前",
-            tabs = listOf(
-                RemoteTab(
-                    title = "ArchWiki - Niri Compositor Documentation",
-                    url = "https://wiki.archlinux.org/title/Niri",
-                    faviconUrl = "https://wiki.archlinux.org/favicon.ico"
-                ),
-                RemoteTab(
-                    title = "GeckoView Javadoc API Reference",
-                    url = "https://mozilla.github.io/geckoview/javadoc/mozilla-central/",
-                    faviconUrl = "https://mozilla.org/favicon.ico"
-                ),
-                RemoteTab(
-                    title = "Android NDK Guides & Toolchains",
-                    url = "https://developer.android.com/ndk/guides",
-                    faviconUrl = "https://developer.android.com/favicon.ico"
-                )
-            )
-        ),
-        RemoteDevice(
-            id = "device_phone",
-            name = "Redmi K60 (ColorOS 16)",
-            deviceType = "mobile",
-            lastSyncTime = "25 分钟前",
-            tabs = listOf(
-                RemoteTab(
-                    title = "GitHub - Trending Repositories",
-                    url = "https://github.com/trending",
-                    faviconUrl = "https://github.githubassets.com/favicons/favicon.svg"
-                ),
-                RemoteTab(
-                    title = "Hacker News: Newest Tech Submissions",
-                    url = "https://news.ycombinator.com",
-                    faviconUrl = "https://news.ycombinator.com/favicon.ico"
-                )
-            )
-        )
-    )
+    private var accountManager: FxaAccountManager? = null
+    private var tabsStorage: RemoteTabsStorage? = null
 
-    private val _accountState = MutableStateFlow(
-        SyncAccountState(
-            isLoggedIn = false,
-            userEmail = null,
-            lastSyncTime = null
-        )
-    )
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var autoSyncJob: Job? = null
+
+    private val _accountState = MutableStateFlow(SyncAccountState())
     val accountState: StateFlow<SyncAccountState> = _accountState.asStateFlow()
 
-    private var autoSyncJob: kotlinx.coroutines.Job? = null
-    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default + kotlinx.coroutines.SupervisorJob())
+    private object NoOpCrashReporting : CrashReporting {
+        override fun submitCaughtException(throwable: Throwable): Job = Job()
+        override fun recordCrashBreadcrumb(breadcrumb: Breadcrumb) {}
+    }
 
     fun init(context: Context) {
-        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        loadAccountState()
+        val app = context.applicationContext
+        appContext = app
+        prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        loadLocalAccountState()
+
+        val serverConfig = FxaConfig(
+            server = FxaServer.Release,
+            clientId = FXA_CLIENT_ID,
+            redirectUri = REDIRECT_URI,
+            tokenServerUrlOverride = null
+        )
+        val deviceConfig = DeviceConfig(
+            name = "OnePlus Pad 2 Pro (Horizon)",
+            type = DeviceType.TABLET,
+            capabilities = emptySet(),
+            secureStateAtRest = false
+        )
+        val syncConfig = SyncConfig(
+            supportedEngines = setOf(SyncEngine.Tabs, SyncEngine.Bookmarks, SyncEngine.History),
+            periodicSyncConfig = PeriodicSyncConfig(periodMinutes = 15, initialDelayMinutes = 5)
+        )
+
+        accountManager = FxaAccountManager(
+            context = app,
+            serverConfig = serverConfig,
+            deviceConfig = deviceConfig,
+            syncConfig = syncConfig,
+            applicationScopes = setOf("profile", "https://identity.mozilla.com/apps/oldsync"),
+            crashReporter = NoOpCrashReporting,
+            coroutineContext = Dispatchers.IO
+        ).also { manager ->
+            manager.register(object : AccountObserver {
+                override fun onProfileUpdated(profile: Profile) {
+                    scope.launch {
+                        _accountState.value = _accountState.value.copy(
+                            isLoggedIn = true,
+                            userEmail = profile.email,
+                            avatarUrl = profile.avatar?.url
+                        )
+                        saveLocalAccountState()
+                    }
+                }
+
+                override fun onLoggedOut() {
+                    scope.launch {
+                        _accountState.value = SyncAccountState()
+                        saveLocalAccountState()
+                    }
+                }
+
+                override fun onAuthenticationProblems() {}
+            })
+        }
+
+        tabsStorage = RemoteTabsStorage(app, crashReporter = NoOpCrashReporting)
+
         startAutoSyncSchedule()
+
+        // 检查已有登录态
+        scope.launch(Dispatchers.IO) {
+            val connected = accountManager?.authenticatedAccount()
+            if (connected != null) {
+                val profile = accountManager?.accountProfile()
+                withContext(Dispatchers.Main) {
+                    _accountState.value = _accountState.value.copy(
+                        isLoggedIn = true,
+                        userEmail = profile?.email ?: _accountState.value.userEmail,
+                        avatarUrl = profile?.avatar?.url ?: _accountState.value.avatarUrl
+                    )
+                    saveLocalAccountState()
+                }
+                triggerSync()
+            }
+        }
     }
 
     private fun startAutoSyncSchedule() {
         autoSyncJob?.cancel()
         autoSyncJob = scope.launch {
             while (isActive) {
-                // 每隔 15 分钟轻量轮询同步 (如已登录且开启自动同步)
                 if (_accountState.value.isLoggedIn && _accountState.value.autoSyncEnabled) {
                     triggerSync()
                 }
-                kotlinx.coroutines.delay(15 * 60 * 1000L)
+                delay(15 * 60 * 1000L)
             }
         }
     }
 
-    private fun loadAccountState() {
+    private fun loadLocalAccountState() {
         val sp = prefs ?: return
         val raw = sp.getString(KEY_SYNC_DATA, null) ?: return
         try {
@@ -138,12 +182,44 @@ object FxaSyncManager {
                 syncTabsEnabled = json.optBoolean("syncTabsEnabled", true),
                 syncPasswordsEnabled = json.optBoolean("syncPasswordsEnabled", true),
                 autoSyncEnabled = json.optBoolean("autoSyncEnabled", true),
-                remoteDevices = if (isLogged) defaultRemoteDevices else emptyList()
+                remoteDevices = if (isLogged) loadCachedDevices(json) else emptyList()
             )
         } catch (_: Exception) {}
     }
 
-    private fun saveAccountState() {
+    private fun loadCachedDevices(json: JSONObject): List<RemoteDevice> {
+        val list = mutableListOf<RemoteDevice>()
+        val arr = json.optJSONArray("remoteDevices") ?: return list
+        for (i in 0 until arr.length()) {
+            val dObj = arr.getJSONObject(i)
+            val tabsArr = dObj.optJSONArray("tabs") ?: JSONArray()
+            val tabs = mutableListOf<RemoteTab>()
+            for (j in 0 until tabsArr.length()) {
+                val tObj = tabsArr.getJSONObject(j)
+                tabs.add(
+                    RemoteTab(
+                        id = tObj.optString("id", java.util.UUID.randomUUID().toString()),
+                        title = tObj.getString("title"),
+                        url = tObj.getString("url"),
+                        faviconUrl = tObj.optString("faviconUrl", null),
+                        lastActiveTime = tObj.optLong("lastActiveTime", System.currentTimeMillis())
+                    )
+                )
+            }
+            list.add(
+                RemoteDevice(
+                    id = dObj.getString("id"),
+                    name = dObj.getString("name"),
+                    deviceType = dObj.optString("deviceType", "desktop"),
+                    lastSyncTime = dObj.optString("lastSyncTime", "刚刚"),
+                    tabs = tabs
+                )
+            )
+        }
+        return list
+    }
+
+    private fun saveLocalAccountState() {
         val sp = prefs ?: return
         val state = _accountState.value
         val json = JSONObject().apply {
@@ -156,98 +232,228 @@ object FxaSyncManager {
             put("syncTabsEnabled", state.syncTabsEnabled)
             put("syncPasswordsEnabled", state.syncPasswordsEnabled)
             put("autoSyncEnabled", state.autoSyncEnabled)
+
+            val devArr = JSONArray()
+            state.remoteDevices.forEach { dev ->
+                val dObj = JSONObject().apply {
+                    put("id", dev.id)
+                    put("name", dev.name)
+                    put("deviceType", dev.deviceType)
+                    put("lastSyncTime", dev.lastSyncTime)
+                    val tArr = JSONArray()
+                    dev.tabs.forEach { t ->
+                        tArr.put(JSONObject().apply {
+                            put("id", t.id)
+                            put("title", t.title)
+                            put("url", t.url)
+                            if (t.faviconUrl != null) put("faviconUrl", t.faviconUrl)
+                            put("lastActiveTime", t.lastActiveTime)
+                        })
+                    }
+                    put("tabs", tArr)
+                }
+                devArr.put(dObj)
+            }
+            put("remoteDevices", devArr)
         }
         sp.edit().putString(KEY_SYNC_DATA, json.toString()).apply()
     }
 
-    // 登录或关联 Firefox 账号
-    fun login(email: String) {
-        val now = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-        _accountState.value = _accountState.value.copy(
-            isLoggedIn = true,
-            userEmail = email,
-            lastSyncTime = now,
-            remoteDevices = defaultRemoteDevices
-        )
-        saveAccountState()
-        triggerSync()
+    // 启动官方 FxA OAuth 登录流程
+    fun requestAuthUrl(onUrlReady: (String) -> Unit) {
+        val manager = accountManager ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val entryPoint = object : FxAEntryPoint {
+                    override val entryName: String = "settings"
+                }
+                val authUrl = manager.beginAuthentication(
+                    entrypoint = entryPoint
+                )
+                if (authUrl != null) {
+                    withContext(Dispatchers.Main) {
+                        onUrlReady(authUrl)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // 处理 OAuth 回调参数 (code, state) 或回调 Uri
+    fun handleAuthCallback(uriString: String, onComplete: (Boolean) -> Unit) {
+        val manager = accountManager ?: run {
+            onComplete(false)
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val uri = Uri.parse(uriString)
+                val code = uri.getQueryParameter("code")
+                val state = uri.getQueryParameter("state")
+
+                if (code.isNullOrBlank() || state.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) { onComplete(false) }
+                    return@launch
+                }
+
+                val authData = FxaAuthData(
+                    authType = AuthType.Signin,
+                    code = code,
+                    state = state,
+                    declinedEngines = emptySet()
+                )
+
+                val success = manager.finishAuthentication(authData)
+                if (success) {
+                    val profile = manager.accountProfile()
+                    withContext(Dispatchers.Main) {
+                        _accountState.value = _accountState.value.copy(
+                            isLoggedIn = true,
+                            userEmail = profile?.email ?: "已连接 Firefox 账户",
+                            avatarUrl = profile?.avatar?.url
+                        )
+                        saveLocalAccountState()
+                        onComplete(true)
+                    }
+                    triggerSync()
+                } else {
+                    withContext(Dispatchers.Main) { onComplete(false) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) { onComplete(false) }
+            }
+        }
     }
 
     fun logout() {
-        _accountState.value = SyncAccountState()
-        saveAccountState()
+        scope.launch(Dispatchers.IO) {
+            try {
+                accountManager?.logout()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            withContext(Dispatchers.Main) {
+                _accountState.value = SyncAccountState()
+                saveLocalAccountState()
+            }
+        }
     }
 
     fun triggerSync() {
+        val manager = accountManager ?: return
         if (!_accountState.value.isLoggedIn) return
         _accountState.value = _accountState.value.copy(isSyncing = true)
 
-        kotlin.concurrent.thread {
+        scope.launch(Dispatchers.IO) {
             try {
-                // 模拟与 Firefox Sync 云端协议数据合并
-                Thread.sleep(1000)
+                // 1. 触发 Sync 核心引擎同步
+                manager.syncNow(mozilla.components.service.fxa.sync.SyncReason.User)
 
-                // 如果启用了书签同步，合并云端精选文档书签
-                if (_accountState.value.syncBookmarksEnabled) {
-                    val syncedBookmarks = listOf(
-                        BookmarkItem(
-                            title = "Rust 官方语言参考",
-                            url = "https://doc.rust-lang.org/reference/",
-                            faviconUrl = "https://www.rust-lang.org/static/images/favicon.svg"
-                        ),
-                        BookmarkItem(
-                            title = "Kotlin 官方中文文档",
-                            url = "https://kotlinlang.org/docs/home.html",
-                            faviconUrl = "https://kotlinlang.org/assets/images/favicon.svg"
-                        ),
-                        BookmarkItem(
-                            title = "Jetpack Compose 平板设计规范",
-                            url = "https://developer.android.com/design/ui/mobile/guides/foundations/large-screens",
-                            faviconUrl = "https://developer.android.com/favicon.ico"
+                // 2. 从 Rust RemoteTabsStorage 读取同步到的多端设备与标签页
+                val devicesMap = tabsStorage?.getAll() ?: emptyMap()
+                val parsedDevices = mutableListOf<RemoteDevice>()
+
+                devicesMap.forEach { (client, tabsList) ->
+                    val remoteTabs = tabsList.mapNotNull { tab ->
+                        val entry = tab.active()
+                        if (entry != null && entry.url.isNotBlank()) {
+                            RemoteTab(
+                                title = entry.title ?: entry.url,
+                                url = entry.url,
+                                faviconUrl = entry.iconUrl,
+                                lastActiveTime = tab.lastUsed
+                            )
+                        } else null
+                    }
+
+                    if (remoteTabs.isNotEmpty()) {
+                        parsedDevices.add(
+                            RemoteDevice(
+                                id = client.id,
+                                name = client.id,
+                                deviceType = "desktop",
+                                lastSyncTime = "刚刚",
+                                tabs = remoteTabs
+                            )
                         )
-                    )
-                    syncedBookmarks.forEach { item ->
-                        if (!BookmarkHistoryManager.isBookmarked(item.url)) {
-                            BookmarkHistoryManager.toggleBookmark(item.title, item.url, item.faviconUrl)
+                    }
+                }
+
+                // 3. 同时查询已注册设备星系 (Device Constellation) 完善设备名与设备类型
+                manager.withConstellationIfExists {
+                    val constellationState = this.state()
+                    val otherDevices = constellationState?.otherDevices ?: emptyList()
+                    otherDevices.forEach { dev ->
+                        val existingIndex = parsedDevices.indexOfFirst { it.id == dev.id }
+                        val typeStr = when (dev.deviceType) {
+                            DeviceType.MOBILE -> "mobile"
+                            DeviceType.TABLET -> "tablet"
+                            else -> "desktop"
+                        }
+                        if (existingIndex >= 0) {
+                            parsedDevices[existingIndex] = parsedDevices[existingIndex].copy(
+                                name = dev.displayName,
+                                deviceType = typeStr
+                            )
+                        } else {
+                            parsedDevices.add(
+                                RemoteDevice(
+                                    id = dev.id,
+                                    name = dev.displayName,
+                                    deviceType = typeStr,
+                                    lastSyncTime = dev.lastAccessTime?.let {
+                                        java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
+                                    } ?: "刚刚",
+                                    tabs = emptyList()
+                                )
+                            )
                         }
                     }
                 }
 
                 val now = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-                _accountState.value = _accountState.value.copy(
-                    isSyncing = false,
-                    lastSyncTime = now,
-                    remoteDevices = defaultRemoteDevices
-                )
-                saveAccountState()
-            } catch (_: Exception) {
-                _accountState.value = _accountState.value.copy(isSyncing = false)
+                withContext(Dispatchers.Main) {
+                    _accountState.value = _accountState.value.copy(
+                        isSyncing = false,
+                        lastSyncTime = now,
+                        remoteDevices = if (parsedDevices.isNotEmpty()) parsedDevices else _accountState.value.remoteDevices
+                    )
+                    saveLocalAccountState()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    _accountState.value = _accountState.value.copy(isSyncing = false)
+                }
             }
         }
     }
 
     fun toggleSyncBookmarks(enabled: Boolean) {
         _accountState.value = _accountState.value.copy(syncBookmarksEnabled = enabled)
-        saveAccountState()
+        saveLocalAccountState()
     }
 
     fun toggleSyncHistory(enabled: Boolean) {
         _accountState.value = _accountState.value.copy(syncHistoryEnabled = enabled)
-        saveAccountState()
+        saveLocalAccountState()
     }
 
     fun toggleSyncTabs(enabled: Boolean) {
         _accountState.value = _accountState.value.copy(syncTabsEnabled = enabled)
-        saveAccountState()
+        saveLocalAccountState()
     }
 
     fun toggleSyncPasswords(enabled: Boolean) {
         _accountState.value = _accountState.value.copy(syncPasswordsEnabled = enabled)
-        saveAccountState()
+        saveLocalAccountState()
     }
 
     fun toggleAutoSync(enabled: Boolean) {
         _accountState.value = _accountState.value.copy(autoSyncEnabled = enabled)
-        saveAccountState()
+        saveLocalAccountState()
     }
 }

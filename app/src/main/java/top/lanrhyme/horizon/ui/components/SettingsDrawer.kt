@@ -42,6 +42,7 @@ fun SettingsDrawer(
     trackingProtection: Boolean,
     onToggleTrackingProtection: (Boolean) -> Unit,
     extensionManager: ExtensionManager,
+    onOpenUrl: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     initialCategory: SettingsCategory = SettingsCategory.EXTENSIONS
 ) {
@@ -159,7 +160,7 @@ fun SettingsDrawer(
                             onToggleTrackingProtection = onToggleTrackingProtection
                         )
                         SettingsCategory.EXTENSIONS -> ExtensionsSection(extensionManager = extensionManager)
-                        SettingsCategory.SYNC_ABOUT -> SyncAboutSection()
+                        SettingsCategory.SYNC_ABOUT -> SyncAboutSection(onOpenUrl = onOpenUrl, onCloseDrawer = onClose)
                     }
                 }
             }
@@ -458,14 +459,22 @@ private fun ExtensionsSection(
 }
 
 @Composable
-private fun SyncAboutSection() {
+private fun SyncAboutSection(
+    onOpenUrl: (String) -> Unit = {},
+    onCloseDrawer: () -> Unit = {}
+) {
     val state by FxaSyncManager.accountState.collectAsState()
+    var isStartingOAuth by remember { mutableStateOf(false) }
+    var showManualCodeDialog by remember { mutableStateOf(false) }
+    var authCodeInput by remember { mutableStateOf("") }
+    var authStateInput by remember { mutableStateOf("") }
+    var authErrorMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Firefox 跨端同步", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MorandiPalette.TextPrimary)
+        Text("Firefox 跨端同步 (官方 FxA 体系)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MorandiPalette.TextPrimary)
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -478,10 +487,10 @@ private fun SyncAboutSection() {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text("当前账号", style = MaterialTheme.typography.bodySmall, color = MorandiPalette.TextSecondary)
                         Text(
-                            text = state.userEmail ?: "未绑定 Firefox 账号",
+                            text = state.userEmail ?: "未连接 Firefox 官方账号",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = MorandiPalette.TextPrimary
@@ -497,53 +506,90 @@ private fun SyncAboutSection() {
                             Text("退出", fontSize = 11.sp, color = MorandiPalette.AccentRose)
                         }
                     } else {
-                        var showLoginDialog by remember { mutableStateOf(false) }
-                        var emailInput by remember { mutableStateOf("user@mozilla.org") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(
+                                onClick = {
+                                    isStartingOAuth = true
+                                    FxaSyncManager.requestAuthUrl { authUrl ->
+                                        isStartingOAuth = false
+                                        onOpenUrl(authUrl)
+                                        onCloseDrawer()
+                                    }
+                                },
+                                enabled = !isStartingOAuth,
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MorandiPalette.AccentBlue),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(if (isStartingOAuth) "生成中..." else "网页授权登录", fontSize = 11.sp)
+                            }
 
-                        Button(
-                            onClick = { showLoginDialog = true },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MorandiPalette.AccentBlue),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            Text("连接账号", fontSize = 11.sp)
-                        }
-
-                        if (showLoginDialog) {
-                            AlertDialog(
-                                onDismissRequest = { showLoginDialog = false },
-                                title = { Text("连接 Firefox 账户") },
-                                text = {
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("关联你的 Firefox Sync 账号以同步跨端书签与标签页：", fontSize = 12.sp, color = MorandiPalette.TextSecondary)
-                                        OutlinedTextField(
-                                            value = emailInput,
-                                            onValueChange = { emailInput = it },
-                                            label = { Text("Firefox 邮箱") },
-                                            singleLine = true
-                                        )
-                                    }
-                                },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        if (emailInput.isNotBlank()) {
-                                            FxaSyncManager.login(emailInput)
-                                            showLoginDialog = false
-                                        }
-                                    }) {
-                                        Text("确定连接", color = MorandiPalette.AccentBlue)
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showLoginDialog = false }) {
-                                        Text("取消", color = MorandiPalette.TextSecondary)
-                                    }
-                                },
-                                containerColor = MorandiPalette.SurfaceElevated,
-                                shape = RoundedCornerShape(16.dp)
-                            )
+                            FilledTonalButton(
+                                onClick = { showManualCodeDialog = true },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text("输入凭据", fontSize = 11.sp)
+                            }
                         }
                     }
+                }
+
+                if (showManualCodeDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showManualCodeDialog = false },
+                        title = { Text("提交 OAuth 授权结果") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    "如果在浏览器中完成官方登录后跳转到空白页或重定向链接，请将地址栏中的完整 URL 或 code 参数粘贴到下方：",
+                                    fontSize = 12.sp,
+                                    color = MorandiPalette.TextSecondary
+                                )
+                                OutlinedTextField(
+                                    value = authCodeInput,
+                                    onValueChange = { authCodeInput = it },
+                                    label = { Text("授权重定向 URL 或 Code") },
+                                    placeholder = { Text("horizon://fxa-callback?code=... 或 https://...") },
+                                    singleLine = false,
+                                    maxLines = 3,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (authErrorMessage != null) {
+                                    Text(authErrorMessage ?: "", color = MorandiPalette.AccentRose, fontSize = 11.sp)
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val trimmed = authCodeInput.trim()
+                                if (trimmed.isNotBlank()) {
+                                    val finalUri = if (trimmed.startsWith("horizon://") || trimmed.startsWith("http")) {
+                                        trimmed
+                                    } else {
+                                        "horizon://fxa-callback?code=$trimmed&state=$authStateInput"
+                                    }
+                                    FxaSyncManager.handleAuthCallback(finalUri) { success ->
+                                        if (success) {
+                                            showManualCodeDialog = false
+                                            authErrorMessage = null
+                                        } else {
+                                            authErrorMessage = "凭据校验失败，请检查 Code 是否已过期"
+                                        }
+                                    }
+                                }
+                            }) {
+                                Text("验证并同步", color = MorandiPalette.AccentBlue)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showManualCodeDialog = false }) {
+                                Text("取消", color = MorandiPalette.TextSecondary)
+                            }
+                        },
+                        containerColor = MorandiPalette.SurfaceElevated,
+                        shape = RoundedCornerShape(16.dp)
+                    )
                 }
 
                 if (state.isLoggedIn) {

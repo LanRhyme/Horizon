@@ -21,6 +21,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Firefox Accounts OAuth 回调协议 (horizon://fxa-callback) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="fxa-callback"
+                    android:scheme="horizon" />
+            </intent-filter>
         </activity>
 
         <provider

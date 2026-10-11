@@ -67,6 +67,18 @@ dependencies {
     implementation("org.mozilla.components:browser-engine-gecko:$acVersion")
     implementation("org.mozilla.components:feature-session:$acVersion")
     implementation("org.mozilla.components:feature-tabs:$acVersion")
+    implementation("org.mozilla.components:service-firefox-accounts:$acVersion") {
+        exclude(group = "org.mozilla.telemetry", module = "glean-native")
+    }
+    implementation("org.mozilla.components:service-sync:$acVersion") {
+        exclude(group = "org.mozilla.telemetry", module = "glean-native")
+    }
+    implementation("org.mozilla.components:feature-syncedtabs:$acVersion") {
+        exclude(group = "org.mozilla.telemetry", module = "glean-native")
+    }
+    implementation("org.mozilla.components:browser-storage-sync:$acVersion") {
+        exclude(group = "org.mozilla.telemetry", module = "glean-native")
+    }
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

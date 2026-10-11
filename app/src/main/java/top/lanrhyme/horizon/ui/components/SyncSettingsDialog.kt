@@ -92,12 +92,16 @@ fun SyncSettingsDialog(
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
-                        onClick = { FxaSyncManager.login(emailInput) },
+                        onClick = {
+                            FxaSyncManager.requestAuthUrl { url ->
+                                // 如果系统有默认浏览器或在新窗口打开
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = MorandiPalette.AccentBlue),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("登录 Firefox 账户并同步")
+                        Text("进入 Firefox 官方授权网页登录")
                     }
                 } else {
                     // 已登录状态
